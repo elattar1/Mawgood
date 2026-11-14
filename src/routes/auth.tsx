@@ -69,6 +69,14 @@ function GoogleIcon() {
 function translateAuthError(err: unknown): string {
   if (!err) return "حدث خطأ غير متوقع، يرجى المحاولة لاحقًا.";
   const msg = err instanceof Error ? err.message : String(err);
+  if (
+    msg.includes("missing OAuth secret") ||
+    msg.includes("Unsupported provider") ||
+    msg.includes("validation_failed") ||
+    msg.includes("OAuth secret")
+  ) {
+    return "خدمة الدخول بحساب Google بانتظار إضافة مفتاح (OAuth Secret) في لوحة التحكم. يمكنك تسجيل الدخول فوراً وبكل سهولة برقم التليفون أو البريد الإلكتروني أدناه.";
+  }
   if (msg.includes("Invalid login credentials")) {
     return "البيانات المدخلة أو كلمة المرور غير صحيحة.";
   }
