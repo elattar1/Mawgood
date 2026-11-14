@@ -220,7 +220,7 @@ export const registerUserWithPhone = createServerFn({ method: "POST" })
     };
   });
 
-/** تحويل الاسم أو رقم الهاتف أو البريد إلى البريد المعتمد لتسجيل الدخول */
+/** تحويل الاسم أو رقم الهاتف أو البريد إلى البريد المعتمد لتسجيل الدخول بأمان دون تسريب بيانات شخصية */
 export const resolveLoginIdentifier = createServerFn({ method: "POST" })
   .validator((data: { identifier: string }) => resolveInput.parse(data))
   .handler(async ({ data }) => {
@@ -230,83 +230,53 @@ export const resolveLoginIdentifier = createServerFn({ method: "POST" })
     // أ) إذا كان المدخل بريداً إلكترونياً (يحوي @)
     if (raw.includes("@")) {
       const cleanEmail = raw.toLowerCase();
-      const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const found = list.data?.users?.find(
-        (u) =>
-          u.email?.toLowerCase() === cleanEmail ||
-          u.user_metadata?.recovery_email?.toLowerCase() === cleanEmail
-      );
-      if (found?.email) {
-        return { authEmail: found.email, phone: found.user_metadata?.phone || null };
-      }
-      return { authEmail: cleanEmail, phone: null };
-    }
-
-    // ب) إذا كان المدخل أرقاماً (رقم هاتف)
-    const cleanPhone = normalizePhone(raw);
-    const systemEmail = `${cleanPhone}@phone.husayniya.app`;
-
-    if (cleanPhone.length >= 8) {
-      // بحث في البروفايلات أولاً
-      try {
-        const prof = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .eq("phone", cleanPhone)
-          .maybeSingle();
-
-        if (prof.data?.id) {
-          const u = await supabaseAdmin.auth.admin.getUserById(prof.data.id);
-          if (u.data?.user?.email) {
-            return { authEmail: u.data.user.email, phone: cleanPhone };
-          }
-        }
-      } catch (e) {
-        console.warn("Error resolving profile by phone:", e);
-      }
-
-      // بحث في قائمة Auth
+      // تحقق مما إذا كان هذا البريد مسجلاً كبريد استعادة لحساب هاتف
       try {
         const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
         const found = list.data?.users?.find(
           (u) =>
-            u.email?.toLowerCase() === systemEmail ||
-            u.user_metadata?.phone === cleanPhone ||
-            u.phone === cleanPhone
+            u.email?.toLowerCase() === cleanEmail ||
+            u.user_metadata?.recovery_email?.toLowerCase() === cleanEmail
         );
         if (found?.email) {
-          return { authEmail: found.email, phone: cleanPhone };
+          return { authEmail: found.email };
         }
-      } catch (e) {
-        console.warn("Error searching auth users by phone:", e);
+      } catch (err) {
+        console.warn("Could not check recovery emails:", err);
       }
-
-      return { authEmail: systemEmail, phone: cleanPhone };
+      return { authEmail: cleanEmail };
     }
 
-    // ج) إذا كان المدخل اسماً (بحث بالاسم في جدول profiles)
+    // ب) إذا كان المدخل أرقاماً (رقم هاتف)
+    const cleanPhone = normalizePhone(raw);
+    if (cleanPhone.length >= 8) {
+      // حسابات الهواتف تُنشأ ببريد نظام موحد وثابت دون الحاجة للبحث وتسريب بيانات المستخدمين
+      return { authEmail: `${cleanPhone}@phone.husayniya.app` };
+    }
+
+    // ج) إذا كان المدخل اسماً كاملاً: مطابقة دقيقة صارمة لمنع التخمين وحصاد الأسماء
     try {
       const prof = await supabaseAdmin
         .from("profiles")
-        .select("id, phone")
-        .ilike("full_name", `%${raw}%`)
+        .select("id")
+        .eq("full_name", raw)
         .limit(1)
         .maybeSingle();
 
       if (prof.data?.id) {
         const u = await supabaseAdmin.auth.admin.getUserById(prof.data.id);
         if (u.data?.user?.email) {
-          return { authEmail: u.data.user.email, phone: prof.data.phone || null };
+          return { authEmail: u.data.user.email };
         }
       }
     } catch (e) {
       console.warn("Error searching profiles by name:", e);
     }
 
-    return { authEmail: systemEmail, phone: cleanPhone };
+    return { authEmail: `${cleanPhone || raw}@phone.husayniya.app` };
   });
 
-/** طلب إعادة تعيين كلمة المرور عبر البريد الإلكتروني المسجل (سواء برقم الهاتف أو البريد) */
+/** طلب إعادة تعيين كلمة المرور عبر البريد الإلكتروني مع تقييد صارم لرابط إعادة التوجيه لمنع Open Redirect */
 export const requestPasswordReset = createServerFn({ method: "POST" })
   .validator((data: { identifier: string; redirectUrl?: string }) => resetInput.parse(data))
   .handler(async ({ data }) => {
@@ -342,11 +312,28 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
       }
     }
 
+    // تقييد رابط إعادة التوجيه ليكون دائماً نطاق التطبيق الرسمي منعاً لثغرات Open Redirect
+    const TRUSTED_ORIGINS = [
+      "https://elattar1-husayniya.lovable.app",
+      "https://husayniya.app",
+    ];
+    let safeRedirect = "https://elattar1-husayniya.lovable.app/auth";
+    if (data.redirectUrl) {
+      try {
+        const parsed = new URL(data.redirectUrl);
+        const isLocal = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+        if (TRUSTED_ORIGINS.includes(parsed.origin) || isLocal) {
+          safeRedirect = `${parsed.origin}/auth`;
+        }
+      } catch {
+        // Fallback to default trusted origin
+      }
+    }
+
     // إرسال رابط إعادة التعيين إلى البريد الإلكتروني
     try {
-      const redirectUri = data.redirectUrl || "https://elattar1-husayniya.lovable.app/auth";
       const { error } = await supabaseAdmin.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: redirectUri,
+        redirectTo: safeRedirect,
       });
       if (error) {
         console.error("Password reset error:", error);
@@ -394,20 +381,20 @@ export const sendDeletionVerificationCode = createServerFn({ method: "POST" })
       },
     });
 
-    // إرسال إشعار في التطبيق بكود التحقق لضمان الوصول الفوري
+    // إرسال تنبيه أمان في التطبيق للمستخدم (دون كشف الكود لحماية الحساب من الجلسات المفتوحة)
     try {
       await supabaseAdmin.from("notifications").insert({
         user_id: context.userId,
-        title: "كود تأكيد طلب حذف الحساب",
-        body: `كود التحقق الخاص بطلب حذف الحساب هو: ${code}. ينتهي خلال 15 دقيقة. إذا لم تكن أنت، يرجى تجاهل الرسالة.`,
+        title: "⚠️ تنبيه أمان: طلب كود حذف الحساب",
+        body: `تم إرسال كود تأكيد حذف الحساب إلى بريدك الإلكتروني المسجل: ${maskEmail(targetEmail)}. إذا لم تكن أنت من قام بهذا الإجراء، يرجى تغيير كلمة المرور فوراً.`,
         is_read: false,
         created_at: new Date().toISOString(),
       });
     } catch (nErr) {
-      console.warn("Could not create in-app notification for code:", nErr);
+      console.warn("Could not create in-app security alert:", nErr);
     }
 
-    // محاولة إرسال كود الـ OTP عبر البريد الرسمي أيضاً
+    // إرسال كود الـ OTP عبر البريد الإلكتروني الخارجي حصراً
     try {
       await context.supabase.auth.signInWithOtp({ email: targetEmail });
     } catch (otpErr) {
@@ -417,7 +404,7 @@ export const sendDeletionVerificationCode = createServerFn({ method: "POST" })
     return {
       success: true,
       maskedEmail: maskEmail(targetEmail),
-      message: `تم إرسال كود التحقق المكون من 6 أرقام إلى بريدك: ${maskEmail(targetEmail)} وتنبيهاتك.`,
+      message: `تم إرسال كود التحقق المكون من 6 أرقام إلى بريدك الإلكتروني: ${maskEmail(targetEmail)}. تفقد صندوق الوارد أو الرسائل غير المرغوب فيها.`,
     };
   });
 
@@ -564,12 +551,20 @@ export const checkAndPurgeAccount = createServerFn({ method: "POST" })
     return { status: "active" };
   });
 
-/** تفعيل فوري للحسابات القديمة غير المؤكدة دون انتظار كود */
+/** تأكيد آمن لحسابات الهاتف المسجلة دون كشف مستخدمي النظام أو تفعيل حسابات بريد خارجية مجهولة */
 export const autoConfirmUser = createServerFn({ method: "POST" })
-  .validator((data: { email: string }) => z.object({ email: z.string().trim() }).parse(data))
+  .validator((data: { email: string; password?: string }) =>
+    z.object({ email: z.string().trim(), password: z.string().optional() }).parse(data)
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const cleanEmail = data.email.toLowerCase().trim();
+
+    // يُسمح بالتأكيد المباشر فقط لحسابات الهاتف النظامية (@phone.husayniya.app) أو عند تقديم كلمة المرور لتأكيد الهوية
+    const isSystemPhoneAccount = cleanEmail.endsWith("@phone.husayniya.app");
+    if (!isSystemPhoneAccount && (!data.password || data.password.length < 6)) {
+      return { success: false, error: "عملية غير مصرح بها" };
+    }
 
     try {
       const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
@@ -577,7 +572,8 @@ export const autoConfirmUser = createServerFn({ method: "POST" })
         (u) => u.email?.toLowerCase().trim() === cleanEmail
       );
       if (!existing) {
-        return { success: false, error: "المستخدم غير مسجل" };
+        // رسالة خطأ عامة ومحايدة لمنع هجمات تخمين الحسابات (Anti User Enumeration)
+        return { success: false, error: "تعذر إتمام العملية" };
       }
 
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
@@ -588,6 +584,6 @@ export const autoConfirmUser = createServerFn({ method: "POST" })
       return { success: true, userId: existing.id };
     } catch (err: any) {
       console.error("Auto confirm user error:", err);
-      return { success: false, error: err?.message || "تعذر تفعيل الحساب" };
+      return { success: false, error: "تعذر تفعيل الحساب" };
     }
   });

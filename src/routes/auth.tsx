@@ -148,7 +148,7 @@ function Auth() {
         // إذا كان الحساب بحاجة لتأكيد فوري
         if (signInErr.message.includes("Email not confirmed")) {
           try {
-            await autoConfirmUser({ data: { email: resolveRes.authEmail } });
+            await autoConfirmUser({ data: { email: resolveRes.authEmail, password: password.trim() } });
             const retry = await supabase.auth.signInWithPassword({
               email: resolveRes.authEmail,
               password: password.trim(),
@@ -240,7 +240,7 @@ function Auth() {
       });
 
       if (signInErr) {
-        await autoConfirmUser({ data: { email: regRes.authEmail } });
+        await autoConfirmUser({ data: { email: regRes.authEmail, password: password.trim() } });
         const retry = await supabase.auth.signInWithPassword({
           email: regRes.authEmail,
           password: password.trim(),

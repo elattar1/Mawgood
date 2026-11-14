@@ -111,6 +111,7 @@ function AccountPage() {
   const [complaintTitle, setComplaintTitle] = useState("");
   const [complaintDesc, setComplaintDesc] = useState("");
   const [complaintImage, setComplaintImage] = useState<string | null>(null);
+  const [complaintFile, setComplaintFile] = useState<File | null>(null);
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
 
   // Driver Application state
@@ -220,6 +221,7 @@ function AccountPage() {
       toast.error("حجم الصورة يجب أن يكون أقل من 5 ميجابايت");
       return;
     }
+    setComplaintFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setComplaintImage(reader.result as string);
@@ -238,6 +240,23 @@ function AccountPage() {
 
     setSubmittingComplaint(true);
     try {
+      let finalImageUrl = complaintImage;
+      if (complaintFile) {
+        try {
+          const ext = complaintFile.name.split('.').pop() || 'jpg';
+          const path = `complaints/${user.id}/${crypto.randomUUID()}.${ext}`;
+          const uploadRes = await supabase.storage.from('service-images').upload(path, complaintFile);
+          if (!uploadRes.error) {
+            const { data: pubUrl } = supabase.storage.from('service-images').getPublicUrl(path);
+            if (pubUrl?.publicUrl) {
+              finalImageUrl = pubUrl.publicUrl;
+            }
+          }
+        } catch (storageErr) {
+          console.warn("Storage upload failed, falling back:", storageErr);
+        }
+      }
+
       const { error } = await supabase.from("complaints_suggestions" as any).insert({
         user_id: user.id,
         customer_name: fullName.trim() || user.email?.split("@")[0] || "عميل",
@@ -245,7 +264,7 @@ function AccountPage() {
         type: complaintType,
         title: complaintTitle.trim(),
         description: complaintDesc.trim(),
-        image_url: complaintImage,
+        image_url: finalImageUrl,
         status: "pending",
       } as any);
 
@@ -255,6 +274,7 @@ function AccountPage() {
       setComplaintTitle("");
       setComplaintDesc("");
       setComplaintImage(null);
+      setComplaintFile(null);
       refetchComplaints();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "تعذر إرسال الشكوى");
@@ -801,7 +821,10 @@ function AccountPage() {
                       />
                       <button
                         type="button"
-                        onClick={() => setComplaintImage(null)}
+                        onClick={() => {
+                          setComplaintImage(null);
+                          setComplaintFile(null);
+                        }}
                         className="absolute -top-1.5 -left-1.5 grid size-4 place-items-center rounded-full bg-destructive text-destructive-foreground text-[10px]"
                         title="حذف الصورة"
                       >
