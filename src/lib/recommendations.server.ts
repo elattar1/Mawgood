@@ -31,15 +31,7 @@ export async function recommendFromCatalog(
     }
     const catalog = await query.order('name');
     if (catalog.data && catalog.data.length > 0) {
-      const dbStores = catalog.data.filter((s) => !s.name.includes('(تجريبي)'));
-      const storeMap = new Map();
-      REAL_STORES.forEach((s) => {
-        if (data.area_id === null || s.area_id === data.area_id) {
-          storeMap.set(s.id, s);
-        }
-      });
-      dbStores.forEach((s) => storeMap.set(s.id, s));
-      allStores = Array.from(storeMap.values());
+      allStores = catalog.data.filter((s) => !s.name.includes('(تجريبي)')) as any;
     }
   } catch (e) {
     console.warn('Could not query remote db stores for recommendation, using real stores catalog:', e);

@@ -31,11 +31,15 @@ import {
   MessageCircle,
   Layers,
   Sparkles,
+  Eye,
+  EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/AppShell";
@@ -43,7 +47,22 @@ import { Field, SelectField, ToggleField } from "./fields";
 import { ImageUploadField } from "./ImageUpload";
 import { CatalogPicker } from "./CatalogPicker";
 import { dashboardQuery, dashboardProductsQuery, dashboardSectionsQuery, dashboardOrderItemsQuery, type DashboardData, type DashboardProduct, type DashboardSection } from "./queries";
-import { saveStore, saveProduct, deleteProduct, saveSection, deleteSection, addSuggestedSections, approveStore, updateRequest, transferStoreOwnership } from "@/lib/dashboard.functions";
+import {
+  saveStore,
+  saveProduct,
+  deleteProduct,
+  saveSection,
+  deleteSection,
+  addSuggestedSections,
+  approveStore,
+  updateRequest,
+  transferStoreOwnership,
+  deleteStore,
+  toggleStoreVisibility,
+  requestStoreDeletion,
+  cancelStoreDeletionRequest,
+  reviewStoreDeletionRequest,
+} from "@/lib/dashboard.functions";
 import { groupProductsBySection, suggestedSectionsFor, type StoreSection } from "@/lib/product-sections";
 import { allowedNext, earnings, type LedgerRow, type RequestKind } from "@/lib/dashboard-rules";
 import { money, dateAr, STATUS_LABELS } from "@/lib/labels";
@@ -128,6 +147,18 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
   const doApproval = useServerFn(approveStore);
   const doTransfer = useServerFn(transferStoreOwnership);
   const doUpdate = useServerFn(updateRequest);
+  const doDeleteStore = useServerFn(deleteStore);
+  const doToggleVisibility = useServerFn(toggleStoreVisibility);
+  const doRequestDeletion = useServerFn(requestStoreDeletion);
+  const doCancelDeletion = useServerFn(cancelStoreDeletionRequest);
+  const doReviewDeletion = useServerFn(reviewStoreDeletionRequest);
+
+  const [storeToDelete, setStoreToDelete] = useState<StoreRow | null>(null);
+  const [requestDeletionModalOpen, setRequestDeletionModalOpen] = useState(false);
+  const [deletionReason, setDeletionReason] = useState("");
+  const [reviewRequest, setReviewRequest] = useState<any | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
 
   const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
   const [activeSectionFilter, setActiveSectionFilter] = useState<string>("all");
@@ -167,11 +198,19 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
   const totals = earnings(tasks);
   const pending = tasks.filter(t => !["delivered", "completed", "cancelled"].includes(t.status)).length;
 
+  const deletionRequests = ((data as any).storeDeletionRequests ?? []) as any[];
+  const pendingDeletionRequests = deletionRequests.filter((r: any) => r.status === "pending");
+  const currentStorePendingRequest = store ? pendingDeletionRequests.find((r: any) => r.store_id === store.id) : null;
+
   const stores = data.stores.filter(s => {
     const q = storeSearch.toLowerCase().trim();
     const matchesSearch = !q || `${s.name} ${s.phone ?? ""} ${(s as any).owner_email ?? ""} ${s.address ?? ""}`.toLowerCase().includes(q);
     const matchesCategory = storeCategoryFilter === "all" || s.category === storeCategoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesVisibility =
+      visibilityFilter === "all" ||
+      (visibilityFilter === "visible" && s.is_active) ||
+      (visibilityFilter === "hidden" && !s.is_active);
+    return matchesSearch && matchesCategory && matchesVisibility;
   });
 
   const products = allProducts.filter(p => {
@@ -465,6 +504,65 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                 </div>
               )}
 
+              {/* قسم طلبات حذف المتاجر للإدارة */}
+              {pendingDeletionRequests.length > 0 && (
+                <div className="mb-6 rounded-2xl border-2 border-rose-500/40 bg-rose-500/5 p-4 sm:p-5 shadow-soft">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="grid size-9 place-items-center rounded-xl bg-rose-500/20 text-rose-600">
+                        <AlertTriangle className="size-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base text-rose-700 dark:text-rose-400">
+                          طلبات حذف المتاجر المعلقة ({pendingDeletionRequests.length})
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          طلبات مقدمة من أصحاب المتاجر لإزالتها نهائياً من المنظومة
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {pendingDeletionRequests.map((req: any) => (
+                      <div key={req.id} className="rounded-xl border border-rose-500/20 bg-card p-4 space-y-2.5 shadow-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-bold text-sm text-foreground">{req.store_name}</h4>
+                          <span className="text-[10px] text-muted-foreground">{dateAr(req.created_at)}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40">
+                          <strong className="text-foreground">السبب:</strong> {req.reason}
+                        </p>
+                        {req.owner_email && (
+                          <p className="text-[11px] text-muted-foreground">
+                            المالك: {req.owner_name ? `${req.owner_name} (${req.owner_email})` : req.owner_email}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 pt-2 border-t">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="flex-1 h-8 text-xs font-bold gap-1"
+                            onClick={() => setReviewRequest({ ...req, action: "approve" })}
+                          >
+                            <Trash2 className="size-3.5" />
+                            موافقة وحذف المتجر
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs font-medium"
+                            onClick={() => setReviewRequest({ ...req, action: "reject" })}
+                          >
+                            رفض الطلب
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <h2 className="mb-4 text-lg font-bold">
                 كافة المتاجر ومقدمو الخدمات <span className="text-sm font-normal text-muted-foreground">({stores.length})</span>
               </h2>
@@ -533,6 +631,39 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                   );
                 })}
               </div>
+
+              {/* شريط تصفية الظهور (ظاهر للعملاء / مخفي) */}
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground ml-1">حالة الظهور:</span>
+                <button
+                  type="button"
+                  onClick={() => setVisibilityFilter("all")}
+                  className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                    visibilityFilter === "all" ? "bg-primary text-primary-foreground shadow-xs" : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  الكل ({data.stores.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibilityFilter("visible")}
+                  className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                    visibilityFilter === "visible" ? "bg-emerald-600 text-white shadow-xs" : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  الظاهرة للعملاء ({data.stores.filter(s => s.is_active).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibilityFilter("hidden")}
+                  className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                    visibilityFilter === "hidden" ? "bg-amber-600 text-white shadow-xs" : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  المخفية ({data.stores.filter(s => !s.is_active).length})
+                </button>
+              </div>
+
               <div className="divide-y border-y">
                 {stores.map(s => {
                   const ownerEmail = (s as any).owner_email as string | null | undefined;
@@ -547,6 +678,22 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                           <div className="flex items-center gap-2">
                             <h3 className="font-sans font-semibold text-base">{s.name}</h3>
                             <span className={`inline-block size-2 rounded-full ${s.is_open ? "bg-emerald-500 animate-pulse" : "bg-destructive"}`} title={s.is_open ? "مفتوح" : "مغلق"} />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            {s.is_active ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                                <Eye className="size-3" /> ظاهر للعملاء
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                                <EyeOff className="size-3" /> مخفي عن المتاجر
+                              </span>
+                            )}
+                            {(s as any).hasPendingDeletion && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold text-rose-600 animate-pulse">
+                                <AlertTriangle className="size-3" /> مطلوب حذفه
+                              </span>
+                            )}
                           </div>
                           <p className="mt-1 text-sm text-muted-foreground">
                             {data.categories.find(c => c.slug === s.category)?.name} • {data.areas.find(a => a.id === s.area_id)?.name ?? "بدون منطقة"}
@@ -659,6 +806,41 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                         <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" onClick={() => setApproval(s)}>
                           {s.is_active ? <Pencil className="size-3" /> : <Check className="size-3" />}
                           {s.is_active ? "العمولة" : "اعتماد"}
+                        </Button>
+
+                        {/* زر إخفاء / إظهار المتجر في قائمة المتاجر */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          title={s.is_active ? "إخفاء المتجر من قائمة المتاجر ومنع ظهوره للعملاء" : "إظهار المتجر لعملاء التطبيق"}
+                          onClick={() => {
+                            execute(
+                              () => doToggleVisibility({ data: { storeId: s.id, is_active: !s.is_active } }),
+                              () => toast.success(!s.is_active ? `تم إظهار متجر «${s.name}» في المتاجر بنجاح` : `تم إخفاء متجر «${s.name}» ولن يظهر للعملاء`),
+                            );
+                          }}
+                          className={`h-8 gap-1 text-xs font-semibold ${
+                            s.is_active
+                              ? "text-muted-foreground hover:text-foreground"
+                              : "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20"
+                          }`}
+                        >
+                          {s.is_active ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5 text-amber-600 dark:text-amber-400" />}
+                          {s.is_active ? "إخفاء" : "إظهار"}
+                        </Button>
+
+                        {/* زر حذف المتجر نهائياً */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          title="حذف المتجر نهائياً من قاعدة البيانات"
+                          onClick={() => setStoreToDelete(s)}
+                          className="h-8 gap-1 text-xs font-semibold border-destructive/30 text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="size-3.5" />
+                          حذف
                         </Button>
                       </div>
                     </div>
@@ -811,6 +993,72 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                   </div>
                 </div>
               </div>
+
+              {/* بطاقة طلب حذف المتجر أو حالة الطلب القيد المراجعة */}
+              {currentStorePendingRequest ? (
+                <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/10 p-4 sm:p-5 shadow-soft">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="grid size-10 place-items-center rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                        <Clock className="size-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-base text-foreground">
+                          طلب حذف المتجر قيد المراجعة لدى الإدارة
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          تم تقديم الطلب بتاريخ {dateAr(currentStorePendingRequest.created_at)}
+                        </p>
+                        <p className="text-xs text-foreground/80 mt-2 bg-background/60 p-2.5 rounded-lg border border-border/50">
+                          <strong>سبب الحذف المذكور:</strong> {currentStorePendingRequest.reason}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        execute(
+                          () => doCancelDeletion({ data: { requestId: currentStorePendingRequest.id } }),
+                          () => toast.success("تم إلغاء طلب حذف المتجر بنجاح"),
+                        );
+                      }}
+                    >
+                      إلغاء طلب الحذف
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5 shadow-soft">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive">
+                        <Trash2 className="size-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-foreground">طلب حذف المتجر نهائياً</h4>
+                        <p className="text-xs text-muted-foreground">
+                          إذا كنت ترغب في إغلاق نشاطك وحذف بيانات المتجر والمنيو من المنظومة، يمكنك تقديم طلب للإدارة.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setDeletionReason("");
+                        setRequestDeletionModalOpen(true);
+                      }}
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10 font-bold text-xs gap-1.5 shrink-0"
+                    >
+                      <Trash2 className="size-3.5" />
+                      طلب حذف متجري
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <Empty text="لم تضف متجرك بعد" action={<Button onClick={() => setStoreEdit("new")}><Plus /> إضافة متجر</Button>} />
@@ -1841,6 +2089,187 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
           )}
         </DialogContent>
       </Dialog>
+      {/* نافذة تأكيد حذف المتجر للأدمن */}
+      <Dialog
+        open={storeToDelete !== null}
+        onOpenChange={open => {
+          if (!open && !busy) setStoreToDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle className="text-destructive flex items-center gap-2">
+            <Trash2 className="size-5" />
+            حذف متجر «{storeToDelete?.name}» نهائياً
+          </DialogTitle>
+          <DialogDescription>
+            تنبيه: سيؤدي هذا الإجراء إلى حذف هذا المتجر وكافة المنتجات والأقسام والتقييمات التابعة له بشكل نهائي من قاعدة البيانات. لا يمكن التراجع عن هذا الإجراء.
+          </DialogDescription>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <Button variant="outline" disabled={busy} onClick={() => setStoreToDelete(null)}>
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={() => {
+                if (!storeToDelete) return;
+                execute(
+                  () => doDeleteStore({ data: { storeId: storeToDelete.id } }),
+                  () => {
+                    setStoreToDelete(null);
+                    toast.success(`تم حذف متجر «${storeToDelete.name}» نهائياً`);
+                  },
+                );
+              }}
+            >
+              تأكيد الحذف النهائي
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* نافذة طلب حذف المتجر لصاحب المتجر */}
+      <Dialog
+        open={requestDeletionModalOpen}
+        onOpenChange={open => {
+          if (!open && !busy) setRequestDeletionModalOpen(false);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <Trash2 className="size-5" />
+            طلب حذف متجر «{store?.name}»
+          </DialogTitle>
+          <DialogDescription>
+            سيتم إرسال هذا الطلب لإدارة خدمات الحسينية للمراجعة والاعتماد. في حال الموافقة سيتم مسح المتجر وكافة المنتجات المرتبطة به نهائياً.
+          </DialogDescription>
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              if (!store) return;
+              if (deletionReason.trim().length < 3) {
+                toast.error("يرجى كتابة سبب الحذف بحد أدنى 3 أحرف");
+                return;
+              }
+              execute(
+                () => doRequestDeletion({ data: { storeId: store.id, reason: deletionReason.trim() } }),
+                () => {
+                  setRequestDeletionModalOpen(false);
+                  setDeletionReason("");
+                  toast.success("تم إرسال طلب حذف المتجر للإدارة بنجاح");
+                },
+              );
+            }}
+            className="space-y-4 mt-2"
+          >
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                سبب طلب الحذف <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                required
+                rows={3}
+                placeholder="يرجى كتابة سبب طلب الحذف بالتفصيل (مثل: إغلاق النشاط التجاري، تصفية المحل، إلخ)"
+                value={deletionReason}
+                onChange={e => setDeletionReason(e.target.value)}
+                className="text-sm rounded-xl"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setRequestDeletionModalOpen(false)}>
+                إلغاء
+              </Button>
+              <Button type="submit" variant="destructive" disabled={busy || deletionReason.trim().length < 3} className="gap-1 font-bold">
+                <Trash2 className="size-4" />
+                إرسال طلب الحذف للإدارة
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* نافذة مراجعة طلب حذف المتجر للأدمن (موافقة أو رفض) */}
+      <Dialog
+        open={reviewRequest !== null}
+        onOpenChange={open => {
+          if (!open && !busy) {
+            setReviewRequest(null);
+            setReviewNotes("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogTitle className={reviewRequest?.action === "approve" ? "text-destructive" : ""}>
+            {reviewRequest?.action === "approve" ? "موافقة وحذف المتجر نهائياً" : "رفض طلب حذف المتجر"}
+          </DialogTitle>
+          <DialogDescription>
+            متجر «{reviewRequest?.store_name}» • السبب: {reviewRequest?.reason}
+          </DialogDescription>
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              if (!reviewRequest) return;
+              execute(
+                () =>
+                  doReviewDeletion({
+                    data: {
+                      requestId: reviewRequest.id,
+                      action: reviewRequest.action,
+                      admin_notes: reviewNotes.trim() || undefined,
+                    },
+                  }),
+                () => {
+                  const act = reviewRequest.action;
+                  setReviewRequest(null);
+                  setReviewNotes("");
+                  toast.success(act === "approve" ? "تمت الموافقة على الطلب وحذف المتجر بنجاح" : "تم رفض طلب حذف المتجر");
+                },
+              );
+            }}
+            className="space-y-4 mt-2"
+          >
+            {reviewRequest?.action === "approve" ? (
+              <div className="p-3 bg-destructive/10 text-destructive text-xs rounded-xl font-medium">
+                تنبيه: سيتم حذف المتجر وجميع المنتجات المرتبطة به نهائياً وإشعار صاحب المتجر بالموافقة.
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-foreground block mb-1">
+                  ملاحظة أو سبب الرفض لصاحب المتجر (اختياري):
+                </label>
+                <Input
+                  placeholder="مثال: يرجى التواصل مع الإدارة لحل الأمر قبل الإغلاق"
+                  value={reviewNotes}
+                  onChange={e => setReviewNotes(e.target.value)}
+                  className="text-sm rounded-xl"
+                />
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setReviewRequest(null);
+                  setReviewNotes("");
+                }}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                variant={reviewRequest?.action === "approve" ? "destructive" : "default"}
+                disabled={busy}
+                className="font-bold"
+              >
+                {reviewRequest?.action === "approve" ? "تأكيد الموافقة والحذف" : "تأكيد رفض الطلب"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* نافذة المحادثة الفورية للطلب */}
       <OrderChatDialog
         orderId={chatOrderId}

@@ -35,23 +35,22 @@ export const getCatalog = createServerFn({ method: 'GET' }).handler(async () => 
       db
         .from('stores')
         .select(
-          'id,name,category,area_id,description,address,phone,specialty,booking_fee,delivery_fee,rating,reviews_count,is_open,logo_url,banner_url'
+          'id,name,category,area_id,description,address,phone,specialty,booking_fee,delivery_fee,rating,reviews_count,is_open,logo_url,banner_url,is_active'
         )
-        .eq('is_active', true)
         .order('name'),
       db.from('categories').select('*').order('sort'),
       db.from('areas').select('*').order('id'),
     ]);
 
-    // Filter out dummy demo stores containing "(تجريبي)"
-    const dbStores = (storesRes.data ?? []).filter((s) => !s.name.includes('(تجريبي)'));
+    let finalStores: any[] = [];
+    if (storesRes.data && storesRes.data.length > 0) {
+      // Database is the single source of truth: only active and non-demo stores are shown
+      finalStores = storesRes.data.filter((s) => s.is_active && !s.name.includes('(تجريبي)'));
+    } else {
+      // Fallback only if database returned empty
+      finalStores = REAL_STORES.filter((s) => s.is_active);
+    }
 
-    // Merge curated real stores with any newly created user stores from database
-    const storeMap = new Map();
-    REAL_STORES.forEach((s) => storeMap.set(s.id, s));
-    dbStores.forEach((s) => storeMap.set(s.id, s));
-
-    const finalStores = Array.from(storeMap.values());
     const finalCategories = categoriesRes.data && categoriesRes.data.length > 0 ? categoriesRes.data : DEFAULT_CATEGORIES;
     const finalAreas = areasRes.data && areasRes.data.length > 0 ? areasRes.data : DEFAULT_AREAS;
 
@@ -63,7 +62,7 @@ export const getCatalog = createServerFn({ method: 'GET' }).handler(async () => 
   } catch (error) {
     console.warn('Error loading remote catalog, using curated fallback:', error);
     return {
-      stores: REAL_STORES,
+      stores: REAL_STORES.filter((s) => s.is_active),
       categories: DEFAULT_CATEGORIES,
       areas: DEFAULT_AREAS,
     };

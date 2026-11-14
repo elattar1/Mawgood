@@ -648,6 +648,50 @@ export type Database = {
           },
         ]
       }
+      store_deletion_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          id: string
+          owner_id: string
+          reason: string
+          reviewed_at: string | null
+          status: string
+          store_id: string
+          store_name: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          owner_id: string
+          reason: string
+          reviewed_at?: string | null
+          status?: string
+          store_id: string
+          store_name: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          owner_id?: string
+          reason?: string
+          reviewed_at?: string | null
+          status?: string
+          store_id?: string
+          store_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_deletion_requests_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string

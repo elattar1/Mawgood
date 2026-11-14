@@ -84,3 +84,28 @@ export const catalogImportInput = z.object({
     stock_qty: z.coerce.number().int().min(0).max(100000).nullable(),
   })).min(1).max(200),
 });
+
+export const deleteStoreInput = z.object({
+  storeId: z.string().uuid(),
+});
+
+export const storeVisibilityInput = z.object({
+  storeId: z.string().uuid(),
+  is_active: z.boolean(),
+});
+
+export const storeDeletionRequestInput = z.object({
+  storeId: z.string().uuid(),
+  reason: z.string().trim().min(3, "يجب كتابة سبب الحذف بحد أدنى 3 أحرف").max(500, "السبب لا يمكن أن يتجاوز 500 حرف"),
+});
+
+export const cancelStoreDeletionRequestInput = z.object({
+  requestId: z.string().uuid(),
+});
+
+export const reviewStoreDeletionRequestInput = z.object({
+  requestId: z.string().uuid(),
+  action: z.enum(["approve", "reject"]),
+  admin_notes: z.string().trim().max(500).optional(),
+});
+
