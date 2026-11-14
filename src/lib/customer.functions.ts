@@ -246,13 +246,37 @@ export const submitOrderReview = createServerFn({ method: 'POST' })
 
     const orderRes = await supabaseAdmin
       .from('orders')
-      .select('id, customer_id, driver_id, store_id, stores(name)')
+      .select('id, customer_id, driver_id, store_id, status, stores(name)')
       .eq('id', data.orderId)
       .eq('customer_id', context.userId)
       .maybeSingle();
 
     if (!orderRes.data) {
       throw new Error('لم يتم العثور على الطلب');
+    }
+
+    // 1. التحقق الصارم من أن الطلب مسجل للمتجر المطلوب تقييمه منعاً للتزوير
+    if (orderRes.data.store_id !== data.storeId) {
+      throw new Error('الطلب المحدد غير مسجل لهذا المتجر');
+    }
+
+    // 2. التحقق من أن الطلب تم تسليمه واكتماله بالفعل قبل السماح بالتقييم
+    if (orderRes.data.status !== 'delivered' && orderRes.data.status !== 'completed') {
+      throw new Error('لا يمكن تقييم المتجر إلا بعد تسليم واستلام الطلب بنجاح');
+    }
+
+    // 3. منع التقييمات المكررة لنفس المتجر خلال 24 ساعة
+    const recentReview = await supabaseAdmin
+      .from('reviews')
+      .select('id')
+      .eq('store_id', data.storeId)
+      .eq('user_id', context.userId)
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (recentReview.data) {
+      throw new Error('لقد قمت بإرسال تقييم لهذا المتجر مؤخراً، شكراً لمشاركتك رأيك');
     }
 
     const profile = await supabaseAdmin
