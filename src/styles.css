@@ -67,54 +67,114 @@ button, a, nav, [role="button"], [role="tab"] {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ============================================================
+   LIQUID GLASS DESIGN SYSTEM — iOS-level material
+   ============================================================ */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.965 0.012 195);
-  --foreground: oklch(0.24 0.04 200);
-  --card: oklch(0.995 0.003 195 / 0.68);
-  --card-foreground: oklch(0.24 0.04 200);
-  --popover: oklch(0.995 0.003 195 / 0.94);
-  --popover-foreground: oklch(0.24 0.04 200);
-  --primary: oklch(0.42 0.08 195);
-  --primary-foreground: oklch(0.98 0.01 85);
-  --secondary: oklch(0.94 0.022 195 / 0.8);
-  --secondary-foreground: oklch(0.3 0.05 195);
-  --muted: oklch(0.95 0.012 195 / 0.8);
-  --muted-foreground: oklch(0.5 0.03 200);
-  --accent: oklch(0.78 0.15 70);
-  --accent-foreground: oklch(0.25 0.05 50);
-  --destructive: oklch(0.58 0.2 27);
-  --destructive-foreground: oklch(0.98 0 0);
-  --success: oklch(0.6 0.13 155);
-  --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.75 0.15 75);
-  --border: oklch(0.85 0.018 195 / 0.65);
-  --input: oklch(0.8 0.025 195 / 0.55);
-  --ring: oklch(0.42 0.08 195);
-  --chart-1: oklch(0.42 0.08 195);
-  --chart-2: oklch(0.78 0.15 70);
-  --chart-3: oklch(0.6 0.13 155);
-  --chart-4: oklch(0.58 0.2 27);
-  --chart-5: oklch(0.55 0.1 250);
-  --sidebar: oklch(0.97 0.01 85);
-  --sidebar-foreground: oklch(0.24 0.04 200);
-  --sidebar-primary: oklch(0.42 0.08 195);
-  --sidebar-primary-foreground: oklch(0.98 0.01 85);
-  --sidebar-accent: oklch(0.93 0.03 85);
-  --sidebar-accent-foreground: oklch(0.3 0.05 195);
-  --sidebar-border: oklch(0.89 0.02 85);
-  --sidebar-ring: oklch(0.42 0.08 195);
+  --radius: 0.75rem;
 
-  --gradient-hero: linear-gradient(180deg, oklch(0.2 0.05 200 / 0.15), oklch(0.2 0.05 200 / 0.85));
-  --gradient-brand: linear-gradient(135deg, oklch(0.42 0.08 195), oklch(0.32 0.07 210));
-  --glass-border: oklch(1 0 0 / 0.8);
-  --glass-highlight: oklch(1 0 0 / 0.65);
-  --scrim: oklch(0.2 0.025 195 / 0.45);
-  --shadow-soft: 0 8px 24px -12px oklch(0.3 0.06 200 / 0.2);
-  --shadow-glass: inset 0 1px 0 var(--glass-highlight), 0 8px 28px -16px oklch(0.3 0.04 195 / 0.25);
-  --gradient-canvas: linear-gradient(120deg, oklch(0.94 0.032 175) 0%, oklch(0.985 0.006 195) 40%, oklch(0.955 0.028 80) 72%, oklch(0.935 0.023 230) 100%);
+  /* Canvas colours */
+  --background: oklch(0.962 0.014 196);
+  --foreground: oklch(0.22 0.042 202);
+
+  /* Card / Popover — frosted-glass base */
+  --card: oklch(1 0 0 / 0.52);
+  --card-foreground: oklch(0.22 0.042 202);
+  --popover: oklch(1 0 0 / 0.88);
+  --popover-foreground: oklch(0.22 0.042 202);
+
+  /* Primary teal */
+  --primary: oklch(0.44 0.085 196);
+  --primary-foreground: oklch(0.98 0.008 90);
+
+  /* Secondary / muted */
+  --secondary: oklch(0.96 0.014 196 / 0.75);
+  --secondary-foreground: oklch(0.3 0.052 196);
+  --muted: oklch(0.96 0.01 196 / 0.65);
+  --muted-foreground: oklch(0.52 0.028 202);
+
+  /* Accent amber */
+  --accent: oklch(0.80 0.14 68);
+  --accent-foreground: oklch(0.24 0.055 52);
+
+  /* Status */
+  --destructive: oklch(0.58 0.21 28);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.60 0.135 155);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.76 0.148 76);
+
+  /* Structural */
+  --border: oklch(1 0 0 / 0.60);
+  --input: oklch(1 0 0 / 0.45);
+  --ring: oklch(0.44 0.085 196);
+
+  /* Charts */
+  --chart-1: oklch(0.44 0.085 196);
+  --chart-2: oklch(0.80 0.14 68);
+  --chart-3: oklch(0.60 0.135 155);
+  --chart-4: oklch(0.58 0.21 28);
+  --chart-5: oklch(0.55 0.10 252);
+
+  /* Sidebar */
+  --sidebar: oklch(0.97 0.01 86);
+  --sidebar-foreground: oklch(0.22 0.042 202);
+  --sidebar-primary: oklch(0.44 0.085 196);
+  --sidebar-primary-foreground: oklch(0.98 0.008 90);
+  --sidebar-accent: oklch(0.93 0.030 86);
+  --sidebar-accent-foreground: oklch(0.30 0.052 196);
+  --sidebar-border: oklch(0.88 0.020 86);
+  --sidebar-ring: oklch(0.44 0.085 196);
+
+  /* Glass tokens */
+  --glass-border: oklch(1 0 0 / 0.82);
+  --glass-highlight: oklch(1 0 0 / 0.72);
+  --glass-shine: oklch(1 0 0 / 0.38);
+  --scrim: oklch(0.18 0.028 196 / 0.42);
+
+  /* Canvas gradient — rich multi-stop */
+  --gradient-canvas:
+    radial-gradient(ellipse 80% 60% at 15% 10%, oklch(0.88 0.06 175 / 0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 85% 20%, oklch(0.92 0.06 240 / 0.40) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 70% at 70% 85%, oklch(0.90 0.07 65 / 0.35) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 10% 80%, oklch(0.90 0.05 150 / 0.30) 0%, transparent 55%),
+    linear-gradient(145deg, oklch(0.945 0.028 180), oklch(0.980 0.005 196) 50%, oklch(0.950 0.025 230));
+
+  --gradient-hero: linear-gradient(180deg, oklch(0.2 0.05 200 / 0.12), oklch(0.2 0.05 200 / 0.82));
+  --gradient-brand: linear-gradient(135deg, oklch(0.44 0.085 196), oklch(0.34 0.075 212));
+
+  /* Shadow system */
+  --shadow-glass:
+    inset 0 1.5px 0 oklch(1 0 0 / 0.80),
+    inset 0 -1px 0 oklch(0 0 0 / 0.04),
+    inset 1px 0 0 oklch(1 0 0 / 0.30),
+    0 4px 6px -1px oklch(0.2 0.04 196 / 0.08),
+    0 10px 32px -8px oklch(0.2 0.04 196 / 0.16),
+    0 1px 2px 0 oklch(0.2 0.04 196 / 0.06);
+
+  --shadow-glass-elevated:
+    inset 0 1.5px 0 oklch(1 0 0 / 0.85),
+    inset 0 -1px 0 oklch(0 0 0 / 0.05),
+    inset 1px 0 0 oklch(1 0 0 / 0.35),
+    0 8px 16px -4px oklch(0.2 0.04 196 / 0.12),
+    0 24px 48px -12px oklch(0.2 0.04 196 / 0.22),
+    0 2px 4px 0 oklch(0.2 0.04 196 / 0.08);
+
+  --shadow-soft: 0 8px 24px -12px oklch(0.3 0.06 200 / 0.18);
+
+  --shadow-btn-primary:
+    0 1px 2px oklch(0.2 0.04 196 / 0.20),
+    0 4px 12px -2px oklch(0.44 0.085 196 / 0.35),
+    inset 0 1px 0 oklch(1 0 0 / 0.25);
+
+  --shadow-btn-glass:
+    inset 0 1px 0 oklch(1 0 0 / 0.70),
+    inset 0 -1px 0 oklch(0 0 0 / 0.06),
+    0 2px 8px -1px oklch(0.2 0.04 196 / 0.12),
+    0 1px 2px oklch(0.2 0.04 196 / 0.06);
 }
 
+/* ---- Base layer ---- */
 @layer base {
   * { border-color: var(--color-border); }
   html { direction: rtl; }
@@ -127,47 +187,156 @@ button, a, nav, [role="button"], [role="tab"] {
   }
   h1, h2, h3 { font-family: var(--font-display); }
   * { letter-spacing: 0; }
+
+  /* Smooth scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.6 0.03 196 / 0.35);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.5 0.05 196 / 0.55);
+  }
 }
 
+/* ============================================================
+   CORE GLASS UTILITIES
+   ============================================================ */
+
+/* Primary glass material — used for cards, surfaces */
 @utility glass-surface {
-  background-color: var(--card);
-  border-color: var(--glass-border);
-  backdrop-filter: blur(16px) saturate(125%);
+  position: relative;
+  background: oklch(1 0 0 / 0.52);
+  border-color: oklch(1 0 0 / 0.80);
+  backdrop-filter: blur(28px) saturate(180%) brightness(1.04);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.04);
   box-shadow: var(--shadow-glass);
 }
 
-/* نمط الليكويد جلاس المستطيل بشفافية موزونة وأناقة فائقة */
-@utility liquid-glass-rect {
-  background-color: rgb(255 255 255 / 0.32);
-  border-color: rgb(255 255 255 / 0.45);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.65), 0 8px 24px -6px rgb(0 0 0 / 0.25);
+/* Elevated glass — dialogs, popovers */
+@utility glass-elevated {
+  position: relative;
+  background: oklch(1 0 0 / 0.72);
+  border-color: oklch(1 0 0 / 0.85);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  box-shadow: var(--shadow-glass-elevated);
 }
 
+/* Thin material — nav bars, tab bars */
+@utility glass-thin {
+  position: relative;
+  background: oklch(1 0 0 / 0.68);
+  border-color: oklch(1 0 0 / 0.75);
+  backdrop-filter: blur(20px) saturate(160%) brightness(1.03);
+  -webkit-backdrop-filter: blur(20px) saturate(160%) brightness(1.03);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.80),
+    0 1px 0 oklch(0 0 0 / 0.05),
+    0 4px 20px -4px oklch(0.2 0.04 196 / 0.10);
+}
+
+/* Liquid glass — interactive buttons / chips */
+@utility liquid-glass {
+  position: relative;
+  background: linear-gradient(
+    145deg,
+    oklch(1 0 0 / 0.60) 0%,
+    oklch(1 0 0 / 0.38) 50%,
+    oklch(1 0 0 / 0.52) 100%
+  );
+  border-color: oklch(1 0 0 / 0.78);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: var(--shadow-btn-glass);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@utility liquid-glass {
+  &:hover {
+    background: linear-gradient(
+      145deg,
+      oklch(1 0 0 / 0.72) 0%,
+      oklch(1 0 0 / 0.48) 50%,
+      oklch(1 0 0 / 0.65) 100%
+    );
+    box-shadow:
+      inset 0 1.5px 0 oklch(1 0 0 / 0.85),
+      0 4px 16px -2px oklch(0.2 0.04 196 / 0.18),
+      0 1px 3px oklch(0.2 0.04 196 / 0.08);
+  }
+  &:active {
+    transform: scale(0.975);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.60),
+      0 1px 4px oklch(0.2 0.04 196 / 0.10);
+  }
+}
+
+/* Legacy compat — keep liquid-glass-rect as alias */
+@utility liquid-glass-rect {
+  position: relative;
+  background: linear-gradient(145deg, oklch(1 0 0 / 0.58) 0%, oklch(1 0 0 / 0.38) 100%);
+  border-color: oklch(1 0 0 / 0.78);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: var(--shadow-glass);
+}
+
+/* ============================================================
+   BG-CARD — global glass card base
+   ============================================================ */
 @layer components {
   .bg-card {
-    backdrop-filter: blur(12px) saturate(120%);
+    background: oklch(1 0 0 / 0.52);
+    backdrop-filter: blur(24px) saturate(170%) brightness(1.03);
+    -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(1.03);
     box-shadow: var(--shadow-glass);
   }
   input.bg-card, textarea.bg-card, select.bg-card {
-    background-color: var(--popover);
-    box-shadow: inset 0 1px 0 var(--glass-highlight);
+    background: oklch(1 0 0 / 0.65);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: inset 0 1.5px 0 oklch(1 0 0 / 0.80), inset 0 -1px 0 oklch(0 0 0 / 0.04);
   }
 }
 
+/* ============================================================
+   OPAQUE FALLBACK (browsers without backdrop-filter)
+   ============================================================ */
 @supports not (backdrop-filter: blur(1px)) {
-  .glass-surface, .bg-card, .liquid-glass-rect {
-    background-color: var(--popover);
-    border-color: var(--border);
+  .glass-surface,
+  .glass-elevated,
+  .glass-thin,
+  .liquid-glass,
+  .liquid-glass-rect,
+  .bg-card {
+    background: oklch(0.97 0.006 196 / 0.97);
+    border-color: oklch(0.85 0.018 196 / 0.70);
+    box-shadow: 0 2px 8px oklch(0.2 0.04 196 / 0.12);
   }
 }
 
+/* ============================================================
+   HELPER UTILITIES
+   ============================================================ */
 @utility bg-hero-overlay { background-image: var(--gradient-hero); }
 @utility bg-brand { background-image: var(--gradient-brand); }
 @utility shadow-soft { box-shadow: var(--shadow-soft); }
+@utility shadow-glass { box-shadow: var(--shadow-glass); }
+@utility shadow-glass-elevated { box-shadow: var(--shadow-glass-elevated); }
 
-/* إخفاء شارة Lovable */
+/* ============================================================
+   SELECTION COLOUR
+   ============================================================ */
+::selection {
+  background: oklch(0.44 0.085 196 / 0.22);
+  color: oklch(0.22 0.042 202);
+}
+
+/* ============================================================
+   إخفاء شارة Lovable
+   ============================================================ */
 #lovable-badge,
 #lovable-badge-container,
 .lovable-badge,
