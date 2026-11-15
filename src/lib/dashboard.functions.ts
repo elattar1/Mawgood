@@ -140,6 +140,45 @@ export const getDashboard = createServerFn({ method: "POST" })
       console.warn("Could not fetch store deletion complaints:", e);
     }
 
+    // Fallback: check notifications if complaints_suggestions had no requests
+    if (storeDeletionRequests.length === 0) {
+      try {
+        let notifQuery = db
+          .from("notifications")
+          .select("*")
+          .ilike("title", "%طلب حذف متجر%")
+          .order("created_at", { ascending: false });
+
+        if (!data.admin) {
+          notifQuery = notifQuery.eq("user_id", context.userId);
+        }
+
+        const notifRes = await notifQuery;
+        if (notifRes.data) {
+          for (const n of notifRes.data) {
+            const idMatch = n.body?.match(/معرف المتجر \(ID\):\s*([a-f0-9-]+)/i);
+            const matchedStoreId = idMatch ? idMatch[1] : mergedStores.find(s => n.title?.includes(s.name))?.id;
+            const storeName = n.title?.replace("🗑️ [طلب حذف متجر]:", "").replace("طلب حذف متجر:", "").trim() || "";
+            if (matchedStoreId) {
+              storeDeletionRequests.push({
+                id: n.id,
+                store_id: matchedStoreId,
+                owner_id: n.user_id,
+                store_name: storeName,
+                reason: n.body || "",
+                status: n.is_read ? "approved" : "pending",
+                admin_notes: null,
+                created_at: n.created_at,
+                reviewed_at: null,
+                owner_email: userEmailMap.get(n.user_id) ?? null,
+                owner_name: userNameMap.get(n.user_id) ?? null,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
     const enrichedStores = mergedStores.map(s => ({
       ...s,
       owner_email: s.owner_id ? (userEmailMap.get(s.owner_id) ?? null) : null,
@@ -981,20 +1020,44 @@ export const requestStoreDeletion = createServerFn({ method: "POST" })
     ].filter(Boolean).join("\n");
 
     // 3. Insert complaint ticket into complaints_suggestions for the admin
-    const insertComplaint = await supabaseAdmin
-      .from("complaints_suggestions" as any)
-      .insert({
-        user_id: context.userId,
-        customer_name: customerName,
-        phone: contactPhone,
-        type: "complaint",
-        title: `طلب حذف متجر: ${store.data.name}`,
-        description: fullDescription,
-        status: "pending",
-      });
+    let complaintSaved = false;
+    try {
+      const insertComplaint = await supabaseAdmin
+        .from("complaints_suggestions" as any)
+        .insert({
+          user_id: context.userId,
+          customer_name: customerName,
+          phone: contactPhone,
+          type: "complaint",
+          title: `طلب حذف متجر: ${store.data.name}`,
+          description: fullDescription,
+          status: "pending",
+        });
 
-    if (insertComplaint.error) {
-      throw new Error(insertComplaint.error.message);
+      if (!insertComplaint.error) {
+        complaintSaved = true;
+      }
+    } catch {}
+
+    // Fallback: Notify admins if complaints_suggestions table is not present
+    if (!complaintSaved) {
+      const adminRoles = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "admin");
+      if (adminRoles.data && adminRoles.data.length > 0) {
+        for (const admin of adminRoles.data) {
+          await supabaseAdmin.from("notifications").insert({
+            user_id: admin.user_id,
+            title: `🗑️ [طلب حذف متجر]: ${store.data.name}`,
+            body: fullDescription,
+            link: "/admin?tab=stores",
+          });
+        }
+      }
+      await supabaseAdmin.from("notifications").insert({
+        user_id: context.userId,
+        title: "تم استلام طلب حذف المتجر",
+        body: `تم استلام طلبك لحذف المتجر "${store.data.name}" بنجاح وجاري مراجعته من قبل إدارة المنصة.`,
+        link: "/provider",
+      });
     }
 
     // 4. Best-effort insert into store_deletion_requests if the table exists
@@ -1066,6 +1129,23 @@ export const cancelStoreDeletionRequest = createServerFn({ method: "POST" })
           .from("store_deletion_requests" as any)
           .delete()
           .eq("id", data.requestId);
+        return { success: true };
+      }
+    } catch {}
+
+    // 3. Fallback to notifications if saved as notification
+    try {
+      const notif = await supabaseAdmin
+        .from("notifications")
+        .select("id, user_id")
+        .eq("id", data.requestId)
+        .maybeSingle();
+
+      if (notif.data) {
+        if (!isAdmin && notif.data.user_id !== context.userId) {
+          throw new Error("غير مصرح لك بإلغاء هذا الطلب");
+        }
+        await supabaseAdmin.from("notifications").delete().eq("id", data.requestId);
         return { success: true };
       }
     } catch {}
@@ -1157,6 +1237,24 @@ export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
               reviewed_at: new Date().toISOString(),
             })
             .eq("id", data.requestId);
+        }
+      } catch {}
+    }
+
+    if (!storeId || !ownerId) {
+      try {
+        const notifRes = await supabaseAdmin
+          .from("notifications")
+          .select("id, user_id, title, body")
+          .eq("id", data.requestId)
+          .maybeSingle();
+
+        if (notifRes.data) {
+          ownerId = notifRes.data.user_id;
+          const idMatch = notifRes.data.body?.match(/معرف المتجر \(ID\):\s*([a-f0-9-]+)/i);
+          storeId = idMatch ? idMatch[1] : null;
+          storeName = notifRes.data.title?.replace("🗑️ [طلب حذف متجر]:", "").replace("طلب حذف متجر:", "").trim() || "المتجر";
+          await supabaseAdmin.from("notifications").update({ is_read: true }).eq("id", data.requestId);
         }
       } catch {}
     }
