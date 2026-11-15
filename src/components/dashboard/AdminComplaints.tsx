@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { getAdminComplaintsTickets, adminReplyToTicket } from "@/lib/customer.functions";
 
 export type Complaint = {
   id: string;
@@ -47,30 +48,37 @@ export function AdminComplaints({ open, onOpenChange }: { open: boolean; onOpenC
   const { data: tickets = [], isLoading, refetch } = useQuery({
     queryKey: ["admin-complaints"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("complaints_suggestions" as any)
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) {
+      try {
+        const list = await getAdminComplaintsTickets();
+        return (list as unknown as Complaint[]) ?? [];
+      } catch (error) {
         console.error("Error fetching complaints:", error);
         return [];
       }
-      return (data as unknown as Complaint[]) ?? [];
     },
     enabled: open,
   });
 
   const replyMutation = useMutation({
-    mutationFn: async ({ id, reply, status }: { id: string; reply: string; status: string }) => {
-      const { error } = await supabase
-        .from("complaints_suggestions" as any)
-        .update({
-          admin_reply: reply,
-          status: status,
-          replied_at: new Date().toISOString(),
-        } as any)
-        .eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({
+      id,
+      reply,
+      status,
+      targetUserId,
+    }: {
+      id: string;
+      reply: string;
+      status: string;
+      targetUserId?: string;
+    }) => {
+      await adminReplyToTicket({
+        data: {
+          ticketId: id,
+          targetUserId,
+          replyText: reply,
+          status: status as any,
+        },
+      });
     },
     onSuccess: () => {
       toast.success("تم إرسال الرد بنجاح");
@@ -268,6 +276,7 @@ export function AdminComplaints({ open, onOpenChange }: { open: boolean; onOpenC
                   onClick={() => {
                     replyMutation.mutate({
                       id: selectedTicket.id,
+                      targetUserId: selectedTicket.user_id,
                       reply: replyText.trim(),
                       status: replyStatus,
                     });

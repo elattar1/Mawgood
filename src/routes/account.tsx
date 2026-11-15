@@ -37,6 +37,12 @@ import { pageMeta } from "@/lib/page-meta";
 import { MapLocationPicker } from "@/components/MapLocationPicker";
 import { extractCoordinates, cleanDisplayAddress, formatAddressWithCoordinates } from "@/lib/map-utils";
 import { DeleteAccountModal } from "@/components/DeleteAccountModal";
+import {
+  submitCustomerComplaint,
+  submitDriverApplication,
+  submitMerchantApplication,
+  getCustomerComplaintsList,
+} from "@/lib/customer.functions";
 
 export const Route = createFileRoute("/account")({
   head: () => pageMeta("حسابي", "إدارة الملف الشخصي، العناوين، الشكاوى والاقتراحات، وطلبات الانضمام"),
@@ -165,16 +171,13 @@ function AccountPage() {
     queryKey: ["my-complaints", user?.id],
     enabled: !!user && complaintsOpen,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("complaints_suggestions" as any)
-        .select("*")
-        .eq("user_id", user?.id)
-        .order("created_at", { ascending: false });
-      if (error) {
+      try {
+        const list = await getCustomerComplaintsList();
+        return (list as unknown as Complaint[]) ?? [];
+      } catch (error) {
         console.error("Error loading complaints:", error);
         return [];
       }
-      return (data as unknown as Complaint[]) ?? [];
     },
   });
 
@@ -257,18 +260,16 @@ function AccountPage() {
         }
       }
 
-      const { error } = await supabase.from("complaints_suggestions" as any).insert({
-        user_id: user.id,
-        customer_name: fullName.trim() || user.email?.split("@")[0] || "عميل",
-        phone: phoneNumber.trim() || "",
-        type: complaintType,
-        title: complaintTitle.trim(),
-        description: complaintDesc.trim(),
-        image_url: finalImageUrl,
-        status: "pending",
-      } as any);
-
-      if (error) throw error;
+      await submitCustomerComplaint({
+        data: {
+          type: complaintType,
+          title: complaintTitle.trim(),
+          description: complaintDesc.trim(),
+          customerName: fullName.trim() || user.email?.split("@")[0] || "عميل",
+          phone: phoneNumber.trim() || "",
+          imageUrl: finalImageUrl,
+        },
+      });
 
       toast.success("تم إرسال رسالتك بنجاح وسيقوم فريق الإدارة بمراجعتها والرد عليك");
       setComplaintTitle("");
@@ -289,16 +290,14 @@ function AccountPage() {
     if (!user) return;
     setSubmittingDriver(true);
     try {
-      const { error } = await supabase.from("driver_applications" as any).insert({
-        user_id: user.id,
-        full_name: fullName.trim() || "مندوب جديد",
-        phone: phoneNumber.trim(),
-        vehicle_type: driverVehicle,
-        national_id: driverNationalId.trim(),
-        status: "pending",
-      } as any);
-
-      if (error) throw error;
+      await submitDriverApplication({
+        data: {
+          fullName: fullName.trim() || "مندوب جديد",
+          phone: phoneNumber.trim(),
+          vehicleType: driverVehicle,
+          nationalId: driverNationalId.trim(),
+        },
+      });
 
       toast.success("تم تقديم طلب الانضمام لأسطول التوصيل بنجاح! سنتواصل معك هاتفياً.");
       setDriverModalOpen(false);
@@ -315,17 +314,15 @@ function AccountPage() {
     if (!user) return;
     setSubmittingMerchant(true);
     try {
-      const { error } = await supabase.from("merchant_applications" as any).insert({
-        user_id: user.id,
-        store_name: merchantName.trim(),
-        category: merchantCategory,
-        address: merchantAddress.trim(),
-        phone: merchantPhone.trim() || phoneNumber.trim(),
-        description: merchantDesc.trim(),
-        status: "pending",
-      } as any);
-
-      if (error) throw error;
+      await submitMerchantApplication({
+        data: {
+          storeName: merchantName.trim(),
+          category: merchantCategory,
+          address: merchantAddress.trim(),
+          phone: merchantPhone.trim() || phoneNumber.trim(),
+          description: merchantDesc.trim(),
+        },
+      });
 
       toast.success("تم تقديم طلبك لإضافة النشاط بنجاح! سيتم مراجعته وتفعيله قريباً.");
       setMerchantModalOpen(false);

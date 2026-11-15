@@ -281,3 +281,398 @@ export const submitOrderReview = createServerFn({ method: 'POST' })
 
     return { success: true };
   });
+
+export const submitCustomerComplaint = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    z.object({
+      type: z.enum(['complaint', 'suggestion', 'inquiry']).default('complaint'),
+      title: z.string().trim().min(1),
+      description: z.string().trim().min(1),
+      customerName: z.string().trim().optional(),
+      phone: z.string().trim().optional(),
+      imageUrl: z.string().nullable().optional(),
+    })
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 1. Try inserting directly into complaints_suggestions if table exists
+    try {
+      const res = await supabaseAdmin.from('complaints_suggestions' as any).insert({
+        user_id: context.userId,
+        customer_name: data.customerName || 'عميل',
+        phone: data.phone || '',
+        type: data.type,
+        title: data.title,
+        description: data.description,
+        image_url: data.imageUrl,
+        status: 'pending',
+      } as any);
+      if (!res.error) {
+        return { success: true };
+      }
+      console.warn('complaints_suggestions insert returned error, using fallback:', res.error);
+    } catch (e) {
+      console.warn('complaints_suggestions table not present, using fallback:', e);
+    }
+
+    // 2. Fallback: Save ticket as admin notification
+    const typeLabel = data.type === 'complaint' ? 'شكوى' : data.type === 'suggestion' ? 'اقتراح' : 'استفسار';
+    const payload = JSON.stringify({
+      id: crypto.randomUUID(),
+      ticket_type: data.type,
+      user_id: context.userId,
+      customer_name: data.customerName || 'عميل',
+      phone: data.phone || '',
+      title: data.title,
+      description: data.description,
+      image_url: data.imageUrl,
+      created_at: new Date().toISOString(),
+    });
+
+    const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
+    if (adminRoles.data && adminRoles.data.length > 0) {
+      for (const admin of adminRoles.data) {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: admin.user_id,
+          title: `📩 [${typeLabel} جديدة]: ${data.title}`,
+          body: `من: ${data.customerName || 'عميل'} | هاتف: ${data.phone || 'غير مسجل'}\n${data.description}\n[TICKET_PAYLOAD:${payload}]`,
+          link: '/admin',
+        });
+      }
+    }
+
+    // Confirmation to customer
+    await supabaseAdmin.from('notifications').insert({
+      user_id: context.userId,
+      title: 'تم استلام رسالتك بنجاح',
+      body: `تم استلام ${typeLabel} بعنوان "${data.title}". سيقوم فريق الإدارة بمراجعتها والتواصل معك قريباً.`,
+      link: '/account',
+    });
+
+    return { success: true };
+  });
+
+export const submitDriverApplication = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    z.object({
+      fullName: z.string().trim().min(1),
+      phone: z.string().trim().min(8),
+      vehicleType: z.string().trim(),
+      nationalId: z.string().trim().optional(),
+    })
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 1. Try inserting directly into driver_applications if table exists
+    try {
+      const res = await supabaseAdmin.from('driver_applications' as any).insert({
+        user_id: context.userId,
+        full_name: data.fullName,
+        phone: data.phone,
+        vehicle_type: data.vehicleType,
+        national_id: data.nationalId || null,
+        status: 'pending',
+      } as any);
+      if (!res.error) {
+        return { success: true };
+      }
+      console.warn('driver_applications insert returned error, using fallback:', res.error);
+    } catch (e) {
+      console.warn('driver_applications table not present, using fallback:', e);
+    }
+
+    // 2. Fallback: Save application as admin notification
+    const payload = JSON.stringify({
+      id: crypto.randomUUID(),
+      application_type: 'driver',
+      user_id: context.userId,
+      full_name: data.fullName,
+      phone: data.phone,
+      vehicle_type: data.vehicleType,
+      national_id: data.nationalId || '',
+      created_at: new Date().toISOString(),
+    });
+
+    const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
+    if (adminRoles.data && adminRoles.data.length > 0) {
+      for (const admin of adminRoles.data) {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: admin.user_id,
+          title: `🛵 [طلب انضمام دليفري جديد]: ${data.fullName}`,
+          body: `الاسم: ${data.fullName}\nالهاتف: ${data.phone}\nوسيلة التوصيل: ${data.vehicleType}${data.nationalId ? `\nالرقم القومي: ${data.nationalId}` : ''}\n[APPLICATION_PAYLOAD:${payload}]`,
+          link: '/drivers',
+        });
+      }
+    }
+
+    // Confirmation to customer
+    await supabaseAdmin.from('notifications').insert({
+      user_id: context.userId,
+      title: 'تم استلام طلب الانضمام لأسطول التوصيل',
+      body: `شكراً لك يا ${data.fullName}! تم استلام طلبك للعمل كمندوب توصيل (${data.vehicleType}) بنجاح وسنتواصل معك هاتفياً قريباً.`,
+      link: '/account',
+    });
+
+    return { success: true };
+  });
+
+export const submitMerchantApplication = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    z.object({
+      storeName: z.string().trim().min(1),
+      category: z.string().trim(),
+      address: z.string().trim().min(1),
+      phone: z.string().trim().min(8),
+      description: z.string().trim().min(1),
+    })
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 1. Try inserting directly into merchant_applications if table exists
+    try {
+      const res = await supabaseAdmin.from('merchant_applications' as any).insert({
+        user_id: context.userId,
+        store_name: data.storeName,
+        category: data.category,
+        address: data.address,
+        phone: data.phone,
+        description: data.description,
+        status: 'pending',
+      } as any);
+      if (!res.error) {
+        return { success: true };
+      }
+      console.warn('merchant_applications insert returned error, using fallback:', res.error);
+    } catch (e) {
+      console.warn('merchant_applications table not present, using fallback:', e);
+    }
+
+    // 2. Fallback: Save application as admin notification
+    const payload = JSON.stringify({
+      id: crypto.randomUUID(),
+      application_type: 'merchant',
+      user_id: context.userId,
+      store_name: data.storeName,
+      category: data.category,
+      address: data.address,
+      phone: data.phone,
+      description: data.description,
+      created_at: new Date().toISOString(),
+    });
+
+    const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
+    if (adminRoles.data && adminRoles.data.length > 0) {
+      for (const admin of adminRoles.data) {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: admin.user_id,
+          title: `🏪 [طلب إضافة متجر جديد]: ${data.storeName}`,
+          body: `اسم النشاط: ${data.storeName}\nالقسم: ${data.category}\nالعنوان: ${data.address}\nالهاتف: ${data.phone}\nالتفاصيل: ${data.description}\n[APPLICATION_PAYLOAD:${payload}]`,
+          link: '/admin?tab=stores',
+        });
+      }
+    }
+
+    // Confirmation to customer
+    await supabaseAdmin.from('notifications').insert({
+      user_id: context.userId,
+      title: 'تم استلام طلب إضافة نشاطك التجاري',
+      body: `تم تسجيل طلب إضافة "${data.storeName}" بنجاح! سيقوم فريق إدارة خدمات الحسينية بمراجعته والتواصل معك لتفعيله.`,
+      link: '/account',
+    });
+
+    return { success: true };
+  });
+
+export const getCustomerComplaintsList = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 1. Try complaints_suggestions table
+    try {
+      const res = await supabaseAdmin
+        .from('complaints_suggestions' as any)
+        .select('*')
+        .eq('user_id', context.userId)
+        .order('created_at', { ascending: false });
+      if (!res.error && res.data && res.data.length > 0) {
+        return res.data;
+      }
+    } catch {}
+
+    // 2. Fallback: read notifications for user
+    try {
+      const notifs = await supabaseAdmin
+        .from('notifications')
+        .select('*')
+        .eq('user_id', context.userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (notifs.data) {
+        const tickets: any[] = [];
+        for (const n of notifs.data) {
+          if (n.title.includes('استلام رسالتك') || n.title.includes('استلام طلب')) {
+            tickets.push({
+              id: n.id,
+              user_id: context.userId,
+              customer_name: 'أنت',
+              phone: '',
+              type: n.title.includes('دليفري') ? 'suggestion' : 'complaint',
+              title: n.title,
+              description: n.body,
+              image_url: null,
+              status: 'pending',
+              admin_reply: null,
+              replied_at: null,
+              created_at: n.created_at,
+            });
+          }
+        }
+        return tickets;
+      }
+    } catch {}
+
+    return [];
+  });
+
+export const getAdminComplaintsTickets = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const role = await context.supabase.rpc('has_role', { _user_id: context.userId, _role: 'admin' });
+    if (role.error || !role.data) throw new Error('هذه الصفحة مخصصة للإدارة فقط');
+
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 1. Try complaints_suggestions table
+    try {
+      const res = await supabaseAdmin
+        .from('complaints_suggestions' as any)
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!res.error && res.data && res.data.length > 0) {
+        return res.data;
+      }
+    } catch {}
+
+    // 2. Fallback: Parse from admin notifications
+    try {
+      const notifs = await supabaseAdmin
+        .from('notifications')
+        .select('*')
+        .or('title.ilike.%[شكوى%,title.ilike.%[اقتراح%,title.ilike.%[طلب انضمام%,title.ilike.%[طلب إضافة%')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (notifs.data && notifs.data.length > 0) {
+        const tickets: any[] = [];
+        for (const n of notifs.data) {
+          let ticketType: 'complaint' | 'suggestion' | 'inquiry' = 'complaint';
+          if (n.title.includes('اقتراح')) ticketType = 'suggestion';
+          if (n.title.includes('استفسار')) ticketType = 'inquiry';
+          if (n.title.includes('دليفري') || n.title.includes('متجر')) ticketType = 'suggestion';
+
+          let customerName = 'عميل';
+          let phone = '';
+          let desc = n.body;
+
+          const matchName = n.body.match(/(?:من|الاسم|اسم النشاط):\s*([^\n|]+)/);
+          if (matchName) customerName = matchName[1].trim();
+
+          const matchPhone = n.body.match(/(?:هاتف|الهاتف|التليفون):\s*([0-9+]+)/);
+          if (matchPhone) phone = matchPhone[1].trim();
+
+          const payloadMatch = n.body.match(/\[(?:TICKET_PAYLOAD|APPLICATION_PAYLOAD):(\{.*?\})\]/);
+          let imageUrl: string | null = null;
+          if (payloadMatch) {
+            try {
+              const p = JSON.parse(payloadMatch[1]);
+              if (p.image_url) imageUrl = p.image_url;
+              if (p.customer_name) customerName = p.customer_name;
+              if (p.full_name) customerName = p.full_name;
+              if (p.store_name) customerName = p.store_name;
+              if (p.phone) phone = p.phone;
+              if (p.description) desc = p.description;
+            } catch {}
+          }
+
+          tickets.push({
+            id: n.id,
+            user_id: n.user_id,
+            customer_name: customerName,
+            phone: phone,
+            type: ticketType,
+            title: n.title.replace(/^📩\s*|\[.*?\]:\s*/g, ''),
+            description: desc.replace(/\n\[(?:TICKET_PAYLOAD|APPLICATION_PAYLOAD):.*?\]/g, ''),
+            image_url: imageUrl,
+            status: n.is_read ? 'resolved' : 'pending',
+            admin_reply: null,
+            replied_at: null,
+            created_at: n.created_at,
+          });
+        }
+        return tickets;
+      }
+    } catch {}
+
+    return [];
+  });
+
+export const adminReplyToTicket = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    z.object({
+      ticketId: z.string(),
+      targetUserId: z.string().optional(),
+      replyText: z.string().trim().min(1),
+      status: z.enum(['in_review', 'resolved', 'closed']).default('resolved'),
+    })
+  )
+  .handler(async ({ context, data }) => {
+    const role = await context.supabase.rpc('has_role', { _user_id: context.userId, _role: 'admin' });
+    if (role.error || !role.data) throw new Error('هذه العملية مخصصة للإدارة فقط');
+
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 1. Try complaints_suggestions
+    try {
+      await supabaseAdmin
+        .from('complaints_suggestions' as any)
+        .update({
+          admin_reply: data.replyText,
+          status: data.status,
+          replied_at: new Date().toISOString(),
+        } as any)
+        .eq('id', data.ticketId);
+    } catch {}
+
+    // 2. Mark notification as read if it was a notification-based ticket
+    try {
+      await supabaseAdmin
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', data.ticketId);
+    } catch {}
+
+    // 3. Send notification to the user
+    if (data.targetUserId) {
+      try {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: data.targetUserId,
+          title: '💬 رد الإدارة على طلبك / شكواك',
+          body: data.replyText,
+          link: '/account',
+        });
+      } catch (e) {
+        console.error('Failed to notify customer of admin reply:', e);
+      }
+    }
+
+    return { success: true };
+  });

@@ -224,7 +224,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 pl-10">
             {otherPartyPhone && (
               <Button asChild variant="outline" size="sm" className="h-8 gap-1 text-xs">
                 <a href={`tel:${otherPartyPhone}`}>

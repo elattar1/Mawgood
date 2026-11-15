@@ -97,20 +97,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* روابط سطح المكتب حسب الوضع الحالي */}
           <nav className="hidden items-center gap-3 text-sm lg:flex">
-            {appMode === "customer" && (
-              <>
-                <Link to="/" activeProps={active} activeOptions={{ exact: true }}>الرئيسية</Link>
-                {isOffersVisible && (
-                  <Link to="/offers" activeProps={active} className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
-                    <Flame className="size-4 animate-pulse" />
-                    <span>العروض والتخفيضات</span>
-                    <span className="rounded-full bg-destructive/15 text-destructive px-1.5 py-0.5 text-[10px] font-extrabold">خصم 🔥</span>
-                  </Link>
-                )}
-                <Link to={user ? "/orders" : "/auth"} activeProps={active}>طلباتي</Link>
-              </>
-            )}
-
             {appMode === "merchant" && (
               <>
                 <Link to="/provider" search={{ tab: "orders" }} activeProps={active}>الطلبات الحية</Link>
@@ -152,6 +138,49 @@ export function AppShell({ children }: { children: ReactNode }) {
                 وضع المشتري
               </Button>
             )}
+
+            {/* أيقونات الرئيسية والعروض وطلباتي على اليسار بجوار السلة والإشعارات في الوضع العرضي */}
+            <Link
+              to="/"
+              activeOptions={{ exact: true }}
+              className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                currentPath === "/"
+                  ? "text-primary font-bold bg-primary/10"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-label="الرئيسية"
+              title="الرئيسية"
+            >
+              <Home className="h-5 w-5" />
+            </Link>
+
+            {isOffersVisible && (
+              <Link
+                to="/offers"
+                className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                  currentPath.startsWith("/offers")
+                    ? "text-primary font-bold bg-primary/10"
+                    : "text-amber-600 dark:text-amber-400 hover:bg-muted"
+                }`}
+                aria-label="العروض والتخفيضات"
+                title="العروض والتخفيضات 🔥"
+              >
+                <Flame className="h-5 w-5" />
+              </Link>
+            )}
+
+            <Link
+              to={user ? "/orders" : "/auth"}
+              className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                currentPath === "/orders"
+                  ? "text-primary font-bold bg-primary/10"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-label="طلباتي"
+              title="طلباتي"
+            >
+              <ClipboardList className="h-5 w-5" />
+            </Link>
 
             {user && (
               <Link to="/notifications" className="relative rounded-full p-2 hover:bg-muted" aria-label="الإشعارات">
