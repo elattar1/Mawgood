@@ -49,11 +49,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   const currentPath = location.pathname;
   const currentTab = String((location.search as any)?.tab || (currentPath.includes("/admin") || currentPath.includes("/provider") ? "stores" : ""));
 
-  const navItem =
-    "flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted-foreground/85 py-1.5 px-2.5 rounded-full transition-all duration-200 min-w-[50px] hover:text-foreground active:scale-95";
-  const activeItemClass =
-    "text-primary font-bold bg-primary/12 shadow-[inset_0_1px_0_oklch(1_0_0/0.85)] scale-[1.02]";
+  const activeItemClass = "text-primary font-bold";
   const active = { className: activeItemClass };
+
+  const isHomeActive = appMode === "customer" && currentPath === "/";
+  const isOffersActive = appMode === "customer" && (currentPath === "/offers" || currentPath.startsWith("/offers/"));
+  const isCartActive = appMode === "customer" && currentPath === "/cart";
+  const isOrdersActive = appMode === "customer" && currentPath === "/orders";
+  const isAccountActive = currentPath === "/account" || currentPath === "/auth";
+
+  const getNavItemClass = (isActive: boolean) =>
+    `flex flex-col items-center justify-center gap-0.5 text-[11px] py-1 px-2 rounded-full transition-colors duration-150 min-w-[50px] active:scale-95 ${
+      isActive
+        ? "text-primary font-bold"
+        : "text-muted-foreground/80 font-medium hover:text-foreground"
+    }`;
 
   const handleReturnToCustomer = () => {
     setAppMode("customer");
@@ -176,22 +186,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* 1. وضع المشتري (افتراضي ونظيف، خالي من أي لوحات أخرى) */}
           {appMode === "customer" && (
             <>
-              <Link to="/" className={navItem} activeProps={active} activeOptions={{ exact: true }}>
-                <Home className="h-5 w-5" />الرئيسية
+              <Link to="/" className={getNavItemClass(isHomeActive)}>
+                <Home className="h-5 w-5" />
+                <span>الرئيسية</span>
               </Link>
               {isOffersVisible && (
-                <Link to="/offers" className={navItem} activeProps={active}>
+                <Link to="/offers" className={getNavItemClass(isOffersActive)}>
                   <div className="relative">
-                    <Flame className="h-5 w-5 text-amber-500" />
+                    <Flame className={`h-5 w-5 ${isOffersActive ? "text-primary" : "text-amber-500"}`} />
                     <span className="absolute -top-1 -right-1 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
                     </span>
                   </div>
-                  العروض 🔥
+                  <span>العروض 🔥</span>
                 </Link>
               )}
-              <Link to="/cart" className={navItem} activeProps={active}>
+              <Link to="/cart" className={getNavItemClass(isCartActive)}>
                 <div className="relative">
                   <ShoppingCart className="h-5 w-5" />
                   {cart.count > 0 && (
@@ -200,10 +211,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     </span>
                   )}
                 </div>
-                السلة
+                <span>السلة</span>
               </Link>
-              <Link to={user ? "/orders" : "/auth"} className={navItem} activeProps={active}>
-                <ClipboardList className="h-5 w-5" />طلباتي
+              <Link to={user ? "/orders" : "/auth"} className={getNavItemClass(isOrdersActive)}>
+                <ClipboardList className="h-5 w-5" />
+                <span>طلباتي</span>
               </Link>
             </>
           )}
@@ -214,30 +226,34 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 to="/provider"
                 search={{ tab: "orders" }}
-                className={`${navItem} ${currentPath.includes("/provider") && currentTab === "orders" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/provider") && currentTab === "orders")}
               >
-                <ClipboardList className="h-5 w-5" />الطلبات
+                <ClipboardList className="h-5 w-5" />
+                <span>الطلبات</span>
               </Link>
               <Link
                 to="/provider"
                 search={{ tab: "products" }}
-                className={`${navItem} ${currentPath.includes("/provider") && currentTab === "products" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/provider") && currentTab === "products")}
               >
-                <Package className="h-5 w-5" />المنيو
+                <Package className="h-5 w-5" />
+                <span>المنيو</span>
               </Link>
               <Link
                 to="/provider"
                 search={{ tab: "stores" }}
-                className={`${navItem} ${currentPath.includes("/provider") && currentTab === "stores" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/provider") && currentTab === "stores")}
               >
-                <Store className="h-5 w-5" />المتجر
+                <Store className="h-5 w-5" />
+                <span>المتجر</span>
               </Link>
               <Link
                 to="/provider"
                 search={{ tab: "earnings" }}
-                className={`${navItem} ${currentPath.includes("/provider") && currentTab === "earnings" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/provider") && currentTab === "earnings")}
               >
-                <Wallet className="h-5 w-5" />الأرباح
+                <Wallet className="h-5 w-5" />
+                <span>الأرباح</span>
               </Link>
             </>
           )}
@@ -248,23 +264,26 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 to="/delivery"
                 search={{ tab: "current" }}
-                className={`${navItem} ${currentPath.includes("/delivery") && currentTab === "current" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/delivery") && currentTab === "current")}
               >
-                <Truck className="h-5 w-5" />معي الآن
+                <Truck className="h-5 w-5" />
+                <span>معي الآن</span>
               </Link>
               <Link
                 to="/delivery"
                 search={{ tab: "available" }}
-                className={`${navItem} ${currentPath.includes("/delivery") && currentTab === "available" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/delivery") && currentTab === "available")}
               >
-                <PackageOpen className="h-5 w-5" />الرادار
+                <PackageOpen className="h-5 w-5" />
+                <span>الرادار</span>
               </Link>
               <Link
                 to="/delivery"
                 search={{ tab: "wallet" }}
-                className={`${navItem} ${currentPath.includes("/delivery") && currentTab === "wallet" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/delivery") && currentTab === "wallet")}
               >
-                <Wallet className="h-5 w-5" />المحفظة
+                <Wallet className="h-5 w-5" />
+                <span>المحفظة</span>
               </Link>
             </>
           )}
@@ -275,50 +294,55 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 to="/admin"
                 search={{ tab: "stores" }}
-                className={`${navItem} ${currentPath.includes("/admin") && currentTab === "stores" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/admin") && currentTab === "stores")}
               >
-                <Store className="h-5 w-5" />المتاجر
+                <Store className="h-5 w-5" />
+                <span>المتاجر</span>
               </Link>
               <Link
                 to="/admin"
                 search={{ tab: "products" }}
-                className={`${navItem} ${currentPath.includes("/admin") && currentTab === "products" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/admin") && currentTab === "products")}
               >
-                <Package className="h-5 w-5" />المنيو
+                <Package className="h-5 w-5" />
+                <span>المنيو</span>
               </Link>
               <Link
                 to="/admin"
                 search={{ tab: "orders" }}
-                className={`${navItem} ${currentPath.includes("/admin") && currentTab === "orders" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/admin") && currentTab === "orders")}
               >
-                <ClipboardList className="h-5 w-5" />الطلبات
+                <ClipboardList className="h-5 w-5" />
+                <span>الطلبات</span>
               </Link>
               <Link
                 to="/drivers"
                 search={{ q: "" }}
-                className={`${navItem} ${currentPath.startsWith("/drivers") ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.startsWith("/drivers"))}
               >
-                <Users className="h-5 w-5" />الأسطول
+                <Users className="h-5 w-5" />
+                <span>الأسطول</span>
               </Link>
               <Link
                 to="/admin"
                 search={{ tab: "earnings" }}
-                className={`${navItem} ${currentPath.includes("/admin") && currentTab === "earnings" ? activeItemClass : ""}`}
+                className={getNavItemClass(currentPath.includes("/admin") && currentTab === "earnings")}
               >
-                <Wallet className="h-5 w-5" />الخزينة
+                <Wallet className="h-5 w-5" />
+                <span>الخزينة</span>
               </Link>
             </>
           )}
 
           {/* حسابي دائمًا هو العنصر الأخير في الشريط السفلي فيكون أقصى الشمال (أقصى اليسار) في الاتجاه العربي RTL في جميع الأوضاع */}
-          <Link to={user ? "/account" : "/auth"} className={navItem} activeProps={active}>
+          <Link to={user ? "/account" : "/auth"} className={getNavItemClass(isAccountActive)}>
             <div className="relative">
               <User className="h-5 w-5" />
               {appMode !== "customer" && (
                 <span className="absolute -top-0.5 -right-1 size-2 rounded-full bg-primary" />
               )}
             </div>
-            حسابي
+            <span>حسابي</span>
           </Link>
         </nav>
       </div>
