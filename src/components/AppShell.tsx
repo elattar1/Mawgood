@@ -139,51 +139,56 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Button>
             )}
 
-            {/* أيقونات الرئيسية والعروض وطلباتي على اليسار بجوار السلة والإشعارات في الوضع العرضي */}
-            <Link
-              to="/"
-              activeOptions={{ exact: true }}
-              className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
-                currentPath === "/"
-                  ? "text-primary font-bold bg-primary/10"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              aria-label="الرئيسية"
-              title="الرئيسية"
-            >
-              <Home className="h-5 w-5" />
-            </Link>
+            {/* في وضع المشتري فقط: تظهر أيقونات الرئيسية والعروض وطلباتي في الوضع العرضي */}
+            {appMode === "customer" && (
+              <>
+                <Link
+                  to="/"
+                  activeOptions={{ exact: true }}
+                  className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                    currentPath === "/"
+                      ? "text-primary font-bold bg-primary/10"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                  aria-label="الرئيسية"
+                  title="الرئيسية"
+                >
+                  <Home className="h-5 w-5" />
+                </Link>
 
-            {isOffersVisible && (
-              <Link
-                to="/offers"
-                className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
-                  currentPath.startsWith("/offers")
-                    ? "text-primary font-bold bg-primary/10"
-                    : "text-amber-600 dark:text-amber-400 hover:bg-muted"
-                }`}
-                aria-label="العروض والتخفيضات"
-                title="العروض والتخفيضات 🔥"
-              >
-                <Flame className="h-5 w-5" />
-              </Link>
+                {isOffersVisible && (
+                  <Link
+                    to="/offers"
+                    className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                      currentPath.startsWith("/offers")
+                        ? "text-primary font-bold bg-primary/10"
+                        : "text-amber-600 dark:text-amber-400 hover:bg-muted"
+                    }`}
+                    aria-label="العروض والتخفيضات"
+                    title="العروض والتخفيضات 🔥"
+                  >
+                    <Flame className="h-5 w-5" />
+                  </Link>
+                )}
+
+                <Link
+                  to={user ? "/orders" : "/auth"}
+                  className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                    currentPath === "/orders"
+                      ? "text-primary font-bold bg-primary/10"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                  aria-label="طلباتي"
+                  title="طلباتي"
+                >
+                  <ClipboardList className="h-5 w-5" />
+                </Link>
+              </>
             )}
 
-            <Link
-              to={user ? "/orders" : "/auth"}
-              className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
-                currentPath === "/orders"
-                  ? "text-primary font-bold bg-primary/10"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              aria-label="طلباتي"
-              title="طلباتي"
-            >
-              <ClipboardList className="h-5 w-5" />
-            </Link>
-
+            {/* الإشعارات: ظاهرة في جميع الأوضاع إذا كان المستخدم مسجل دخول */}
             {user && (
-              <Link to="/notifications" className="relative rounded-full p-2 hover:bg-muted" aria-label="الإشعارات">
+              <Link to="/notifications" className="relative rounded-full p-2 hover:bg-muted" aria-label="الإشعارات" title="الإشعارات">
                 <Bell className="h-5 w-5" />
                 {unread > 0 && (
                   <span className="absolute -top-0.5 -left-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[10px] text-destructive-foreground">
@@ -192,15 +197,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               </Link>
             )}
-            <Link to="/cart" className="relative rounded-full p-2 hover:bg-muted" aria-label="السلة">
-              <ShoppingCart className="h-5 w-5" />
-              {cart.count > 0 && (
-                <span className="absolute -top-0.5 -left-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[10px] text-accent-foreground">
-                  {cart.count}
-                </span>
-              )}
-            </Link>
-            <Link to={user ? "/account" : "/auth"} className="rounded-full p-2 hover:bg-muted" aria-label="الحساب">
+
+            {/* السلة: تظهر فقط في وضع المشتري */}
+            {appMode === "customer" && (
+              <Link to="/cart" className="relative rounded-full p-2 hover:bg-muted" aria-label="السلة" title="السلة">
+                <ShoppingCart className="h-5 w-5" />
+                {cart.count > 0 && (
+                  <span className="absolute -top-0.5 -left-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[10px] text-accent-foreground">
+                    {cart.count}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            {/* حسابي: يظهر في جميع الأوضاع */}
+            <Link to={user ? "/account" : "/auth"} className="rounded-full p-2 hover:bg-muted" aria-label="الحساب" title="حسابي">
               <User className="h-5 w-5" />
             </Link>
           </div>
