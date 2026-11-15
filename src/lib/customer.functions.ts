@@ -20,35 +20,7 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
       .maybeSingle();
 
     if (!store.data) {
-      const staticStore = REAL_STORES.find(s => s.id === data.store_id);
-      if (staticStore) {
-        await supabaseAdmin.from('stores').upsert(
-          {
-            id: staticStore.id,
-            name: staticStore.name,
-            category: staticStore.category,
-            area_id: staticStore.area_id,
-            description: staticStore.description,
-            phone: staticStore.phone,
-            address: staticStore.address,
-            specialty: staticStore.specialty ?? null,
-            delivery_fee: staticStore.delivery_fee,
-            booking_fee: staticStore.booking_fee,
-            commission_rate: staticStore.commission_rate,
-            is_active: true,
-            is_open: staticStore.is_open,
-            logo_url: staticStore.logo_url,
-            banner_url: staticStore.banner_url,
-          },
-          { onConflict: 'id', ignoreDuplicates: true },
-        );
-
-        store = await context.supabase
-          .from('stores')
-          .select('id,is_active,is_open,category,delivery_fee,commission_rate')
-          .eq('id', data.store_id)
-          .maybeSingle();
-      }
+      throw new Error('المتجر غير متاح أو تم حذفه');
     }
 
     if (!store.data?.is_active || !store.data.is_open || ['doctors', 'maintenance', 'home'].includes(store.data.category)) {

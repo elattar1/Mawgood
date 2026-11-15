@@ -10,6 +10,11 @@ import {
   requestKinds,
   allowedNext,
   catalogImportInput,
+  deleteStoreInput,
+  storeVisibilityInput,
+  storeDeletionRequestInput,
+  cancelStoreDeletionRequestInput,
+  reviewStoreDeletionRequestInput,
 } from "./dashboard-rules";
 import { CATALOG_GROUPS, catalogItem, catalogImage } from "./supermarket-catalog";
 import { suggestedSectionsFor } from "./product-sections";
@@ -31,12 +36,10 @@ export const getDashboard = createServerFn({ method: "POST" })
     
     // Filter out dummy demo stores and merge real stores for admin
     const rawStores = (stores.data ?? []).filter(s => !s.name.includes('(تجريبي)'));
-    const storeMap = new Map();
-    if (data.admin) {
-      REAL_STORES.forEach(s => storeMap.set(s.id, { ...s, owner_id: null, created_at: new Date().toISOString() }));
+    let mergedStores = rawStores;
+    if (rawStores.length === 0 && data.admin) {
+      mergedStores = REAL_STORES.map(s => ({ ...s, owner_id: null, created_at: new Date().toISOString() })) as any;
     }
-    rawStores.forEach(s => storeMap.set(s.id, s));
-    const mergedStores = Array.from(storeMap.values());
     const ids = mergedStores.map(s => s.id);
     const [categories, areas, orders, bookings, services] = await Promise.all([
       db.from("categories").select("*").order("sort"),
@@ -78,10 +81,42 @@ export const getDashboard = createServerFn({ method: "POST" })
       }
     }
 
+    let storeDeletionRequests: {
+      id: string;
+      store_id: string;
+      owner_id: string;
+      store_name: string;
+      reason: string;
+      status: "pending" | "approved" | "rejected";
+      admin_notes?: string | null;
+      created_at: string;
+      reviewed_at?: string | null;
+      owner_email?: string | null;
+      owner_name?: string | null;
+    }[] = [];
+
+    try {
+      let delQuery = db.from("store_deletion_requests" as any).select("*").order("created_at", { ascending: false });
+      if (!data.admin) {
+        delQuery = delQuery.eq("owner_id", context.userId);
+      }
+      const delRes = await delQuery;
+      if (!delRes.error && delRes.data) {
+        storeDeletionRequests = (delRes.data as any[]).map(r => ({
+          ...r,
+          owner_email: r.owner_id ? (userEmailMap.get(r.owner_id) ?? null) : null,
+          owner_name: r.owner_id ? (userNameMap.get(r.owner_id) ?? null) : null,
+        }));
+      }
+    } catch (e) {
+      console.warn("Could not fetch store deletion requests:", e);
+    }
+
     const enrichedStores = mergedStores.map(s => ({
       ...s,
       owner_email: s.owner_id ? (userEmailMap.get(s.owner_id) ?? null) : null,
       owner_name: s.owner_id ? (userNameMap.get(s.owner_id) ?? null) : null,
+      hasPendingDeletion: storeDeletionRequests.some(r => r.store_id === s.id && r.status === "pending"),
     }));
 
     return {
@@ -92,6 +127,7 @@ export const getDashboard = createServerFn({ method: "POST" })
       orders: orders.data ?? [],
       bookings: bookings.data ?? [],
       services: services.data ?? [],
+      storeDeletionRequests,
     };
   });
 
@@ -795,3 +831,220 @@ export const getBroadcastAudienceCount = createServerFn({ method: "POST" })
 
     return { count };
   });
+
+export const deleteStore = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(deleteStoreInput)
+  .handler(async ({ context, data }) => {
+    const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+    if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1. Try stored procedure admin_delete_store
+    const rpcRes = await context.supabase.rpc("admin_delete_store", { _store_id: data.storeId });
+    if (!rpcRes.error) {
+      return { success: true };
+    }
+
+    // 2. Cascade delete fallback via supabaseAdmin
+    try {
+      await supabaseAdmin.from("store_deletion_requests" as any).delete().eq("store_id", data.storeId);
+      
+      const ordersRes = await supabaseAdmin.from("orders").select("id").eq("store_id", data.storeId);
+      const orderIds = (ordersRes.data ?? []).map((o: any) => o.id);
+      if (orderIds.length > 0) {
+        await supabaseAdmin.from("order_messages" as any).delete().in("order_id", orderIds);
+        await supabaseAdmin.from("order_items").delete().in("order_id", orderIds);
+        await supabaseAdmin.from("orders").delete().eq("store_id", data.storeId);
+      }
+      await supabaseAdmin.from("bookings").delete().eq("store_id", data.storeId);
+      await supabaseAdmin.from("service_requests").delete().eq("store_id", data.storeId);
+      await supabaseAdmin.from("reviews").delete().eq("store_id", data.storeId);
+      await supabaseAdmin.from("products").delete().eq("store_id", data.storeId);
+      await supabaseAdmin.from("store_sections").delete().eq("store_id", data.storeId);
+
+      const delStore = await supabaseAdmin.from("stores").delete().eq("id", data.storeId);
+      if (delStore.error) throw new Error(delStore.error.message);
+      return { success: true };
+    } catch (err) {
+      console.error("Error during deleteStore cascade fallback:", err);
+      throw new Error(err instanceof Error ? err.message : "فشل حذف المتجر");
+    }
+  });
+
+export const toggleStoreVisibility = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(storeVisibilityInput)
+  .handler(async ({ context, data }) => {
+    const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+    if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
+
+    const result = await context.supabase
+      .from("stores")
+      .update({ is_active: data.is_active })
+      .eq("id", data.storeId)
+      .select("id, is_active")
+      .single();
+
+    if (result.error) throw new Error(result.error.message);
+    return { success: true, is_active: result.data.is_active };
+  });
+
+export const requestStoreDeletion = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(storeDeletionRequestInput)
+  .handler(async ({ context, data }) => {
+    const store = await context.supabase
+      .from("stores")
+      .select("id, name, owner_id")
+      .eq("id", data.storeId)
+      .maybeSingle();
+
+    if (!store.data) throw new Error("المتجر غير موجود");
+
+    const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+    const isAdmin = !!role.data;
+
+    if (!isAdmin && store.data.owner_id !== context.userId) {
+      throw new Error("غير مصرح لك بطلب حذف هذا المتجر");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Check if there is already a pending request
+    const existing = await supabaseAdmin
+      .from("store_deletion_requests" as any)
+      .select("id")
+      .eq("store_id", data.storeId)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (existing.data) {
+      throw new Error("يوجد بالفعل طلب حذف قيد المراجعة لهذا المتجر");
+    }
+
+    const insertRes = await supabaseAdmin
+      .from("store_deletion_requests" as any)
+      .insert({
+        store_id: data.storeId,
+        owner_id: context.userId,
+        store_name: store.data.name,
+        reason: data.reason,
+        status: "pending",
+      });
+
+    if (insertRes.error) throw new Error(insertRes.error.message);
+
+    return { success: true };
+  });
+
+export const cancelStoreDeletionRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(cancelStoreDeletionRequestInput)
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const req = await supabaseAdmin
+      .from("store_deletion_requests" as any)
+      .select("id, owner_id, status")
+      .eq("id", data.requestId)
+      .maybeSingle();
+
+    if (!req.data) throw new Error("طلب الحذف غير موجود");
+
+    const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+    const isAdmin = !!role.data;
+
+    if (!isAdmin && req.data.owner_id !== context.userId) {
+      throw new Error("غير مصرح لك بإلغاء هذا الطلب");
+    }
+
+    const delRes = await supabaseAdmin
+      .from("store_deletion_requests" as any)
+      .delete()
+      .eq("id", data.requestId);
+
+    if (delRes.error) throw new Error(delRes.error.message);
+    return { success: true };
+  });
+
+export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(reviewStoreDeletionRequestInput)
+  .handler(async ({ context, data }) => {
+    const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+    if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const reqRes = await supabaseAdmin
+      .from("store_deletion_requests" as any)
+      .select("id, store_id, owner_id, store_name, status")
+      .eq("id", data.requestId)
+      .maybeSingle();
+
+    if (!reqRes.data) throw new Error("طلب الحذف غير موجود");
+    const req = reqRes.data;
+
+    if (data.action === "approve") {
+      // 1. Mark request as approved
+      await supabaseAdmin
+        .from("store_deletion_requests" as any)
+        .update({
+          status: "approved",
+          admin_notes: data.admin_notes ?? "تمت الموافقة على الحذف من قبل الإدارة",
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", data.requestId);
+
+      // 2. Delete the store
+      const rpcRes = await context.supabase.rpc("admin_delete_store", { _store_id: req.store_id });
+      if (rpcRes.error) {
+        // Fallback cascade delete
+        const ordersRes = await supabaseAdmin.from("orders").select("id").eq("store_id", req.store_id);
+        const orderIds = (ordersRes.data ?? []).map((o: any) => o.id);
+        if (orderIds.length > 0) {
+          await supabaseAdmin.from("order_messages" as any).delete().in("order_id", orderIds);
+          await supabaseAdmin.from("order_items").delete().in("order_id", orderIds);
+          await supabaseAdmin.from("orders").delete().eq("store_id", req.store_id);
+        }
+        await supabaseAdmin.from("bookings").delete().eq("store_id", req.store_id);
+        await supabaseAdmin.from("service_requests").delete().eq("store_id", req.store_id);
+        await supabaseAdmin.from("reviews").delete().eq("store_id", req.store_id);
+        await supabaseAdmin.from("products").delete().eq("store_id", req.store_id);
+        await supabaseAdmin.from("store_sections").delete().eq("store_id", req.store_id);
+        await supabaseAdmin.from("stores").delete().eq("id", req.store_id);
+      }
+
+      // 3. Notify owner
+      await supabaseAdmin.from("notifications").insert({
+        user_id: req.owner_id,
+        title: "تمت الموافقة على حذف المتجر ✅",
+        body: `تمت الموافقة على طلب حذف متجر «${req.store_name}» وتم حذفه وإزالته من التطبيق نهائياً.`,
+        is_read: false,
+      });
+
+      return { success: true, approved: true };
+    } else {
+      // Reject
+      await supabaseAdmin
+        .from("store_deletion_requests" as any)
+        .update({
+          status: "rejected",
+          admin_notes: data.admin_notes ?? "تم رفض طلب الحذف من قبل الإدارة",
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", data.requestId);
+
+      // Notify owner
+      await supabaseAdmin.from("notifications").insert({
+        user_id: req.owner_id,
+        title: "تم رفض طلب حذف المتجر ❌",
+        body: `تم رفض طلب حذف متجر «${req.store_name}». ${data.admin_notes ? "ملاحظة الإدارة: " + data.admin_notes : ""}`,
+        is_read: false,
+      });
+
+      return { success: true, approved: false };
+    }
+  });
+
