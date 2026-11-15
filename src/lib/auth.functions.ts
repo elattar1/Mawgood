@@ -568,8 +568,15 @@ export const autoConfirmUser = createServerFn({ method: "POST" })
 
     try {
       const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const cleanPhone = normalizePhone(cleanEmail);
       const existing = list.data?.users?.find(
-        (u) => u.email?.toLowerCase().trim() === cleanEmail
+        (u) =>
+          u.email?.toLowerCase().trim() === cleanEmail ||
+          u.user_metadata?.recovery_email?.toLowerCase().trim() === cleanEmail ||
+          (cleanPhone && cleanPhone.length >= 8 && (
+            u.user_metadata?.phone === cleanPhone ||
+            u.email?.startsWith(`${cleanPhone}@`)
+          ))
       );
       if (!existing) {
         // رسالة خطأ عامة ومحايدة لمنع هجمات تخمين الحسابات (Anti User Enumeration)
