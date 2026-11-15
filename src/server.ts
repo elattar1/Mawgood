@@ -55,11 +55,154 @@ export default {
     const url = new URL(request.url);
 
     // 1. Handle CORS Preflight for custom API endpoints
-    if (request.method === "OPTIONS" && url.pathname.startsWith("/api/chat")) {
+    if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    // 2. Direct REST API for Order Live Chat (Mobile & Web Interoperability)
+    // 2. Direct REST API for Mobile & Web User Registration (Phone or Email)
+    if (url.pathname === "/api/auth/register" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const { fullName, phone, email, password } = body as {
+          fullName?: string;
+          phone?: string;
+          email?: string;
+          password?: string;
+        };
+
+        if (!password || password.length < 6) {
+          return new Response(
+            JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 6 أحرف أو أرقام" }),
+            { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { normalizePhone } = await import("@/lib/auth.functions");
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        const rawInput = (phone || email || "").trim();
+        const isEmail = rawInput.includes("@");
+        let cleanPhone = "";
+        let systemEmail = "";
+
+        if (isEmail) {
+          systemEmail = rawInput.toLowerCase();
+          cleanPhone = normalizePhone(phone || "");
+        } else {
+          cleanPhone = normalizePhone(rawInput);
+          if (cleanPhone.length < 10) {
+            return new Response(
+              JSON.stringify({ error: "يرجى كتابة رقم هاتف صحيح (مثال: 01012345678)" }),
+              { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+            );
+          }
+          systemEmail = `${cleanPhone}@phone.husayniya.app`;
+        }
+
+        // 1. Check if phone already registered in profiles
+        if (cleanPhone.length >= 8) {
+          const existingProfile = await supabaseAdmin
+            .from("profiles")
+            .select("id, full_name, phone")
+            .eq("phone", cleanPhone)
+            .maybeSingle();
+
+          if (existingProfile.data?.id) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                alreadyExists: true,
+                name: existingProfile.data.full_name || "",
+                identifier: cleanPhone,
+                message: `يوجد حساب بالفعل مسجل برقم الهاتف هذا باسم (${existingProfile.data.full_name || "مستخدم"})، تم تحويلك لتسجيل الدخول.`,
+              }),
+              { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+            );
+          }
+        }
+
+        // 2. Check auth users list
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const users = listData?.users || [];
+        const conflict = users.find(
+          (u) =>
+            u.email?.toLowerCase().trim() === systemEmail ||
+            (cleanPhone && (u.user_metadata?.phone === cleanPhone || u.phone === cleanPhone))
+        );
+
+        if (conflict) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              alreadyExists: true,
+              name: conflict.user_metadata?.full_name || "",
+              identifier: isEmail ? systemEmail : cleanPhone,
+              message: "يوجد مستخدم بالفعل مسجل بهذه البيانات، يرجى تسجيل الدخول.",
+            }),
+            { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+          );
+        }
+
+        // 3. Create user with email_confirm: true (Instant auto-activation, no MX / SMTP bounce)
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: systemEmail,
+          password: password.trim(),
+          email_confirm: true,
+          user_metadata: {
+            full_name: fullName || "مستخدم خدمات الحسينية",
+            phone: cleanPhone,
+            recovery_email: isEmail ? systemEmail : (email?.trim().toLowerCase() || null),
+          },
+        });
+
+        if (createError) {
+          const errorMsg = createError.message?.toLowerCase() || "";
+          if (errorMsg.includes("already registered") || errorMsg.includes("already exists")) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                alreadyExists: true,
+                identifier: isEmail ? systemEmail : cleanPhone,
+                message: "هذا الحساب مسجل مسبقاً، يرجى تسجيل الدخول.",
+              }),
+              { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+            );
+          }
+          return new Response(JSON.stringify({ error: createError.message }), {
+            status: 400,
+            headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          });
+        }
+
+        // 4. Save into profiles table
+        if (newUser?.user?.id) {
+          try {
+            await supabaseAdmin.from("profiles").upsert({
+              id: newUser.user.id,
+              phone: cleanPhone || null,
+              full_name: fullName || "مستخدم خدمات الحسينية",
+            });
+          } catch (_) {}
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            alreadyExists: false,
+            authEmail: systemEmail,
+            phone: cleanPhone,
+          }),
+          { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+        );
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({ error: err?.message || "تعذر إنشاء الحساب" }),
+          { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // 3. Direct REST API for Order Live Chat (Mobile & Web Interoperability)
     if (url.pathname === "/api/chat/send" && request.method === "POST") {
       try {
         const body = await request.json();
