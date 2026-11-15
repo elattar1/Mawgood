@@ -1,4 +1,5 @@
 import { AddressPicker, rememberAddress } from '@/components/AddressPicker';
+import { getPersistedNotes, savePersistedNotes, clearPersistedNotes } from '@/lib/address-storage';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
@@ -55,6 +56,7 @@ function CartContents({ storeId }: { storeId: string }) {
   const { user } = useAuth();
   const { data } = useSuspenseQuery(catalogQuery);
   const [busy, setBusy] = useState(false);
+  const [notes, setNotes] = useState(() => getPersistedNotes());
   const place = useServerFn(placeCustomerOrder);
   const navigate = Route.useNavigate();
   const client = useQueryClient();
@@ -99,6 +101,7 @@ function CartContents({ storeId }: { storeId: string }) {
       });
       void rememberAddress(form);
       cart.clear();
+      clearPersistedNotes();
       await client.invalidateQueries({ queryKey: ['customer-orders'] });
       toast.success('تم إرسال طلبك إلى المتجر');
       navigate({ to: '/orders' });
@@ -175,7 +178,15 @@ function CartContents({ storeId }: { storeId: string }) {
                 <AddressPicker areas={data.areas} defaultArea={store?.area_id} />
                 <label className="block space-y-2 text-sm">
                   ملاحظات
-                  <Input name="notes" />
+                  <Input
+                    name="notes"
+                    value={notes}
+                    onChange={e => {
+                      setNotes(e.target.value);
+                      savePersistedNotes(e.target.value);
+                    }}
+                    placeholder="أي ملاحظات خاصة بالطلب (مثل: بدون مخلل، رن الجرس...)"
+                  />
                 </label>
                 <p className="border-y py-3 text-sm text-muted-foreground">طريقة الدفع: نقدًا عند الاستلام</p>
                 {unavailable && <p className="text-sm text-destructive">المتجر مغلق أو توجد منتجات غير متاحة</p>}

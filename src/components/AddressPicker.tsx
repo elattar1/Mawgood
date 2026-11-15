@@ -5,27 +5,35 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { MapLocationPicker } from '@/components/MapLocationPicker';
 import { extractCoordinates, cleanDisplayAddress, formatAddressWithCoordinates, type Coordinates } from '@/lib/map-utils';
+import { getPersistedAddressDraft, saveAddressDraft } from '@/lib/address-storage';
 
 type Saved = { id: string; label: string; phone: string; address: string; area_id: number | null; is_default: boolean };
 type Area = { id: number; name: string };
 
-/** Renders form inputs named area / address / phone (+ label, save) so existing forms keep working. */
+/** Renders form inputs named area / address / phone (+ label, save) with automatic local persistence. */
 export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: Area[]; defaultArea?: number | null | undefined; showArea?: boolean }) {
   const [saved, setSaved] = useState<Saved[] | null>(null);
-  const [selected, setSelected] = useState<string>('new');
-  const [addressText, setAddressText] = useState<string>('');
-  const [detectedCoords, setDetectedCoords] = useState<Coordinates | null>(null);
+  const [initialDraft] = useState(() => getPersistedAddressDraft());
+
+  const [selected, setSelected] = useState<string>(initialDraft.selectedId || 'new');
+  const [addressText, setAddressText] = useState<string>(initialDraft.address || '');
+  const [phoneText, setPhoneText] = useState<string>(initialDraft.phone || '');
+  const [selectedAreaId, setSelectedAreaId] = useState<number | null>(initialDraft.areaId ?? defaultArea ?? null);
+  const [addressLabel, setAddressLabel] = useState<string>(initialDraft.label || '');
+  const [detectedCoords, setDetectedCoords] = useState<Coordinates | null>(initialDraft.coords);
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
 
-  // Silently detect actual GPS location in the background
+  // Silently detect actual GPS location in the background if not cached
   useEffect(() => {
-    if (navigator.geolocation) {
+    if (navigator.geolocation && !detectedCoords) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setDetectedCoords({
+          const coords = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-          });
+          };
+          setDetectedCoords(coords);
+          saveAddressDraft({ coords });
         },
         () => {
           // Graceful fallback if permission denied or timeout
@@ -33,13 +41,26 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
       );
     }
-  }, []);
+  }, [detectedCoords]);
 
   async function load() {
-    const { data } = await supabase.from('customer_addresses').select('id,label,phone,address,area_id,is_default').order('is_default', { ascending: false }).order('created_at', { ascending: false });
-    const rows = data ?? [];
-    setSaved(rows);
-    setSelected(s => (s !== 'new' && rows.some(r => r.id === s)) ? s : rows[0]?.id ?? 'new');
+    try {
+      const { data } = await supabase.from('customer_addresses').select('id,label,phone,address,area_id,is_default').order('is_default', { ascending: false }).order('created_at', { ascending: false });
+      const rows = data ?? [];
+      setSaved(rows);
+      if (rows.length > 0) {
+        setSelected(s => {
+          if (s === 'new') return 'new';
+          if (rows.some(r => r.id === s)) return s;
+          return rows[0].id;
+        });
+      } else {
+        setSelected('new');
+      }
+    } catch {
+      setSaved([]);
+      setSelected('new');
+    }
   }
   useEffect(() => { void load(); }, []);
 
@@ -47,6 +68,11 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
     await supabase.from('customer_addresses').delete().eq('id', id);
     void load();
   }
+
+  const handleSelectRadio = (id: string) => {
+    setSelected(id);
+    saveAddressDraft({ selectedId: id });
+  };
 
   if (saved === null) return <p className="text-sm text-muted-foreground">جاري تحميل عناوينك...</p>;
   const current = saved.find(s => s.id === selected);
@@ -66,7 +92,7 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
             const hasCoords = !!extractCoordinates(s.address);
             return (
               <label key={s.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition-all ${selected === s.id ? 'border-primary bg-primary/5 shadow-xs' : 'hover:bg-muted/40'}`}>
-                <input type="radio" name="saved_address" className="mt-1" checked={selected === s.id} onChange={() => setSelected(s.id)} />
+                <input type="radio" name="saved_address" className="mt-1" checked={selected === s.id} onChange={() => handleSelectRadio(s.id)} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 font-semibold text-foreground">
                     <MapPin size={14} className="text-primary" />
@@ -90,7 +116,7 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
             );
           })}
           <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-all ${selected === 'new' ? 'border-primary bg-primary/5 font-semibold' : 'hover:bg-muted/40'}`}>
-            <input type="radio" name="saved_address" checked={selected === 'new'} onChange={() => setSelected('new')} />
+            <input type="radio" name="saved_address" checked={selected === 'new'} onChange={() => handleSelectRadio('new')} />
             <Plus size={16} className="text-primary" />
             كتابة عنوان جديد
           </label>
@@ -122,7 +148,17 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
           {showArea && (
             <label className="block space-y-1.5 text-sm">
               <span className="font-medium">المنطقة</span>
-              <select name="area" required className="h-10 w-full rounded-md border bg-card px-3 text-sm" defaultValue={defaultArea ?? ''}>
+              <select
+                name="area"
+                required
+                className="h-10 w-full rounded-md border bg-card px-3 text-sm"
+                value={selectedAreaId ?? defaultArea ?? ''}
+                onChange={e => {
+                  const val = Number(e.target.value) || null;
+                  setSelectedAreaId(val);
+                  saveAddressDraft({ areaId: val });
+                }}
+              >
                 <option value="">اختر المنطقة</option>
                 {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
@@ -133,7 +169,10 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
             <span className="font-medium">العنوان بالتفصيل</span>
             <Input
               value={addressText}
-              onChange={e => setAddressText(e.target.value)}
+              onChange={e => {
+                setAddressText(e.target.value);
+                saveAddressDraft({ address: e.target.value });
+              }}
               required
               minLength={3}
               placeholder="اكتب عنوانك بالتفصيل (الشارع، رقم المنزل، علامة مميزة...)"
@@ -154,16 +193,37 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
 
           <label className="block space-y-1.5 text-sm">
             <span className="font-medium">رقم الهاتف</span>
-            <Input name="phone" type="tel" required minLength={6} placeholder="01xxxxxxxxx" className="text-sm" />
+            <Input
+              name="phone"
+              type="tel"
+              required
+              minLength={6}
+              value={phoneText}
+              onChange={e => {
+                setPhoneText(e.target.value);
+                saveAddressDraft({ phone: e.target.value });
+              }}
+              placeholder="01xxxxxxxxx"
+              className="text-sm"
+            />
           </label>
 
           <label className="block space-y-1.5 text-sm">
             <span className="font-medium">اسم العنوان</span>
-            <Input name="address_label" placeholder="المنزل، الشغل..." defaultValue={saved.length ? '' : 'المنزل'} className="text-sm" />
+            <Input
+              name="address_label"
+              placeholder="المنزل، الشغل..."
+              value={addressLabel}
+              onChange={e => {
+                setAddressLabel(e.target.value);
+                saveAddressDraft({ label: e.target.value });
+              }}
+              className="text-sm"
+            />
           </label>
 
           <p className="text-xs text-muted-foreground leading-relaxed">
-            سيتم حفظ العنوان لتسهيل إعادة استخدامه في المرات القادمة.
+            يتم حفظ العنوان والبيانات تلقائياً في جهازك لعدم فقدانها عند إغلاق المتصفح.
           </p>
         </div>
       )}
@@ -174,22 +234,36 @@ export function AddressPicker({ areas, defaultArea, showArea = true }: { areas: 
         onOpenChange={setMapPickerOpen}
         initialAddress={addressText}
         onConfirm={(full, coords) => {
-          setAddressText(cleanDisplayAddress(full));
+          const clean = cleanDisplayAddress(full);
+          setAddressText(clean);
           setDetectedCoords(coords);
+          saveAddressDraft({ address: clean, coords });
         }}
       />
     </div>
   );
 }
 
-/** Save the address used in a submitted form (no-op if it already exists). */
+/** Save the address used in a submitted form (saves locally and in Supabase). */
 export async function rememberAddress(form: FormData) {
-  if (!form.has('address_label')) return;
   const address = String(form.get('address') ?? '').trim();
   const phone = String(form.get('phone') ?? '').trim();
-  if (address.length < 3 || phone.length < 6) return;
   const areaId = Number(form.get('area')) || null;
   const label = String(form.get('address_label') ?? '').trim() || 'عنوان';
-  const { count } = await supabase.from('customer_addresses').select('id', { count: 'exact', head: true });
-  await supabase.from('customer_addresses').upsert({ address, phone, area_id: areaId, label, is_default: !count }, { onConflict: 'user_id,phone,address', ignoreDuplicates: true });
+
+  if (address.length >= 3 && phone.length >= 6) {
+    saveAddressDraft({
+      address: cleanDisplayAddress(address),
+      phone,
+      areaId,
+      label,
+    });
+  }
+
+  if (!form.has('address_label')) return;
+  if (address.length < 3 || phone.length < 6) return;
+  try {
+    const { count } = await supabase.from('customer_addresses').select('id', { count: 'exact', head: true });
+    await supabase.from('customer_addresses').upsert({ address, phone, area_id: areaId, label, is_default: !count }, { onConflict: 'user_id,phone,address', ignoreDuplicates: true });
+  } catch {}
 }

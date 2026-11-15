@@ -1,3 +1,5 @@
+// src/lib/cart.tsx
+// نظام إدارة وحفظ سلة المشتريات تلقائياً في التخزين المحلي (Local Persistence)
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type CartItem = { product_id: string; name: string; price: number; qty: number };
@@ -13,18 +15,71 @@ type CartCtx = Cart & {
 const empty: Cart = { store_id: null, store_name: "", items: [] };
 const Ctx = createContext<CartCtx | null>(null);
 const KEY = "husseiniya-cart";
+const BACKUP_KEY = "husayniya_cart_backup";
+
+/**
+ * قراءة حالة السلة فوراً من التخزين المحلي
+ */
+function readCartFromStorage(): Cart {
+  if (typeof window === "undefined") return empty;
+  try {
+    const raw = localStorage.getItem(KEY) || localStorage.getItem(BACKUP_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+        return {
+          store_id: parsed.store_id ?? null,
+          store_name: parsed.store_name ?? "",
+          items: parsed.items.map((it: any) => ({
+            product_id: String(it.product_id),
+            name: String(it.name),
+            price: Number(it.price) || 0,
+            qty: Number(it.qty) || 1,
+          })),
+        };
+      }
+    }
+  } catch {}
+  return empty;
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<Cart>(empty);
+  // تهيئة الحالة فوراً من الذاكرة المحلية لمنع وميض "السلة فارغة" عند التحديث
+  const [cart, setCart] = useState<Cart>(readCartFromStorage);
+
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setCart(JSON.parse(raw));
-    } catch {}
+    // التأكد من استرجاع البيانات بعد اكتمال تهيئة المتصفح (Hydration Sync)
+    const stored = readCartFromStorage();
+    if (stored.items.length > 0 && cart.items.length === 0) {
+      setCart(stored);
+    }
+
+    // مزامنة التغييرات فوراً بين النوافذ والتبويبات المختلفة
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === KEY || e.key === BACKUP_KEY) {
+        setCart(readCartFromStorage());
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
   const save = (c: Cart) => {
     setCart(c);
-    localStorage.setItem(KEY, JSON.stringify(c));
+    try {
+      if (typeof window !== "undefined") {
+        if (!c.items || c.items.length === 0) {
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(BACKUP_KEY);
+        } else {
+          const serialized = JSON.stringify(c);
+          localStorage.setItem(KEY, serialized);
+          localStorage.setItem(BACKUP_KEY, serialized);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to save cart to localStorage:", e);
+    }
   };
 
   const add: CartCtx["add"] = (store, item) => {
@@ -40,11 +95,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     save({ store_id: store.id, store_name: store.name, items });
     return true;
   };
+
   const setQty = (product_id: string, qty: number) => {
     const items = cart.items
       .map((i) => (i.product_id === product_id ? { ...i, qty } : i))
       .filter((i) => i.qty > 0);
     save(items.length ? { ...cart, items } : empty);
+  };
+
+  const clear = () => {
+    save(empty);
   };
 
   return (
@@ -53,7 +113,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ...cart,
         add,
         setQty,
-        clear: () => save(empty),
+        clear,
         count: cart.items.reduce((s, i) => s + i.qty, 0),
         subtotal: cart.items.reduce((s, i) => s + i.qty * i.price, 0),
       }}
