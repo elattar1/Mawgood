@@ -15,12 +15,12 @@ export const getOffersVisibility = createServerFn({ method: "GET" }).handler(asy
       .maybeSingle();
 
     if (res.data) {
-      return { visible: res.data.status !== 0 };
+      return { visible: res.data.status === 1 };
     }
   } catch (err) {
     console.warn("Could not read offers visibility from database:", err);
   }
-  return { visible: true };
+  return { visible: false };
 });
 
 /**
