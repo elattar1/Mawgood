@@ -168,6 +168,14 @@ export default {
               { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
             );
           }
+          if (errorMsg.includes("weak") || errorMsg.includes("pwned") || errorMsg.includes("easy to guess")) {
+            return new Response(
+              JSON.stringify({
+                error: "كلمة المرور ضعيفة جداً أو شائعة (مثل 123456). يرجى اختيار كلمة مرور أقوى تحتوي على حروف وأرقام.",
+              }),
+              { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+            );
+          }
           return new Response(JSON.stringify({ error: createError.message }), {
             status: 400,
             headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
