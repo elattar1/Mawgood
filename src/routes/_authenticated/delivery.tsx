@@ -18,6 +18,7 @@ import { pageMeta } from "@/lib/page-meta";
 import { cleanOrderNotes } from "@/lib/utils";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { extractCoordinates, cleanDisplayAddress, getGoogleNavigationUrl, getGoogleMapsPinUrl } from "@/lib/map-utils";
+import { playNewOrderAlert } from "@/lib/order-alert";
 
 export const Route = createFileRoute("/_authenticated/delivery")({
   validateSearch: (s: Record<string, unknown>) => ({ tab: ["available", "current", "wallet"].includes(String(s["tab"])) ? String(s["tab"]) : "available" }),
@@ -30,22 +31,6 @@ export const Route = createFileRoute("/_authenticated/delivery")({
 
 type DeliveryOrder = Awaited<ReturnType<typeof getDriverBoard>>["mine"][number];
 
-function playBeep() {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-  } catch {}
-}
-
 function Delivery() {
   const { data, isFetching } = useSuspenseQuery({ ...driverBoardQuery, refetchInterval: 15_000 });
   const qc = useQueryClient();
@@ -55,17 +40,25 @@ function Delivery() {
   const setWorkingStatus = useServerFn(setMyDriverWorkingStatus);
   const [confirm, setConfirm] = useState<DeliveryOrder | null>(null);
   const [chatOrderId, setChatOrderId] = useState<string | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("husayniya_driver_sound_enabled");
+        return saved !== null ? saved === "true" : true;
+      } catch {}
+    }
+    return true;
+  });
   const prevAvailableCount = useRef(data.available.length);
 
   const current = data.mine.filter(o => o.status === "on_the_way");
   const wallet = driverWallet(data.mine);
   const isWorking = !!data.driver?.is_active;
 
-  // تشغيل تنبيه صوتي عند ظهور طلبات جديدة بالرادار إذا كان السائق شغالاً
+  // تشغيل تنبيه نغمة واهتزاز خفيف عند ظهور طلبات جديدة بالرادار إذا كان السائق شغالاً
   useEffect(() => {
-    if (isWorking && soundEnabled && data.available.length > prevAvailableCount.current) {
-      playBeep();
+    if (isWorking && data.available.length > prevAvailableCount.current) {
+      playNewOrderAlert(soundEnabled);
       toast.info("🚨 طلب توصيل جديد متاح في رادار خدمات الحسينية!");
     }
     prevAvailableCount.current = data.available.length;
@@ -148,8 +141,14 @@ function Delivery() {
               variant="outline"
               className="gap-1.5 text-xs"
               onClick={() => {
-                setSoundEnabled(prev => !prev);
-                toast.info(soundEnabled ? "تم كتم صوت التنبيهات" : "تم تفعيل صوت التنبيهات للطلبات الجديدة");
+                setSoundEnabled(prev => {
+                  const next = !prev;
+                  try {
+                    localStorage.setItem("husayniya_driver_sound_enabled", String(next));
+                  } catch {}
+                  toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة 🔔" : "تم كتم صوت التنبيهات 🔕");
+                  return next;
+                });
               }}
             >
               {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}

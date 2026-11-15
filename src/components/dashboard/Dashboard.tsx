@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -34,6 +34,8 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ import { Field, SelectField, ToggleField } from "./fields";
 import { ImageUploadField } from "./ImageUpload";
 import { CatalogPicker } from "./CatalogPicker";
 import { dashboardQuery, dashboardProductsQuery, dashboardSectionsQuery, dashboardOrderItemsQuery, type DashboardData, type DashboardProduct, type DashboardSection } from "./queries";
+import { playNewOrderAlert } from "@/lib/order-alert";
 import {
   saveStore,
   saveProduct,
@@ -197,6 +200,52 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
   const tasks = allTasks.filter(t => admin || t.store_id === store?.id);
   const totals = earnings(tasks);
   const pending = tasks.filter(t => !["delivered", "completed", "cancelled"].includes(t.status)).length;
+
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("husayniya_merchant_sound_enabled");
+        return saved !== null ? saved === "true" : true;
+      } catch {}
+    }
+    return true;
+  });
+
+  const toggleSound = () => {
+    setSoundEnabled(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("husayniya_merchant_sound_enabled", String(next));
+      } catch {}
+      toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة 🔔" : "تم كتم صوت التنبيهات 🔕");
+      return next;
+    });
+  };
+
+  const pendingTasks = tasks.filter(t => t.status === "pending");
+  const prevPendingCount = useRef(pendingTasks.length);
+  const prevStoreId = useRef(store?.id);
+
+  // تشغيل نغمة تنبيه واهتزاز خفيف عند ورود طلبات جديدة للمتجر
+  useEffect(() => {
+    if (prevStoreId.current !== store?.id) {
+      prevStoreId.current = store?.id;
+      prevPendingCount.current = pendingTasks.length;
+      return;
+    }
+
+    if (pendingTasks.length > prevPendingCount.current) {
+      const diff = pendingTasks.length - prevPendingCount.current;
+      playNewOrderAlert(soundEnabled);
+      toast.info(
+        diff === 1
+          ? "🔔 طلب جديد وارد للمتجر قيد الانتظار!"
+          : `🔔 لديك ${diff} طلبات جديدة واردة للمتجر!`,
+        { duration: 6000 }
+      );
+    }
+    prevPendingCount.current = pendingTasks.length;
+  }, [pendingTasks.length, store?.id, soundEnabled]);
 
   const deletionRequests = ((data as any).storeDeletionRequests ?? []) as any[];
   const pendingDeletionRequests = deletionRequests.filter((r: any) => r.status === "pending");
@@ -404,6 +453,15 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={soundEnabled ? "كتم صوت التنبيهات" : "تفعيل صوت التنبيهات"}
+            title={soundEnabled ? "صوت التنبيهات مفعّل (انقر للكتم)" : "صوت التنبيهات صامت (انقر للتفعيل)"}
+            onClick={toggleSound}
+          >
+            {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
+          </Button>
           <Button variant="outline" size="icon" aria-label="تحديث البيانات" title="تحديث البيانات" onClick={() => client.invalidateQueries({ queryKey: ["dashboard"] })}>
             <RefreshCw className="size-4" />
           </Button>
@@ -1404,7 +1462,18 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                   <p className="text-xs text-muted-foreground">متابعة تنفيذ الطلبات وتحديث حالاتها والتواصل الفوري مع العميل</p>
                 </div>
               </div>
-              <Badge variant="outline" className="font-bold text-xs">{visibleTasks.length} طلب مسجل</Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={toggleSound}
+                >
+                  {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
+                  {soundEnabled ? "صوت التنبيهات مفعّل" : "الصوت صامت"}
+                </Button>
+                <Badge variant="outline" className="font-bold text-xs">{visibleTasks.length} طلب مسجل</Badge>
+              </div>
             </div>
           </div>
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
