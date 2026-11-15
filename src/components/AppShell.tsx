@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }[appMode];
 
   return (
-    <div className="min-h-screen pb-20 lg:pb-0">
+    <div className="min-h-screen pb-20 md:pb-0">
       <header className="glass-top-header sticky top-0 z-40 border-b">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-2">
@@ -96,7 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* روابط سطح المكتب حسب الوضع الحالي */}
-          <nav className="hidden items-center gap-3 text-sm lg:flex">
+          <nav className="hidden items-center gap-3 text-sm md:flex">
             {appMode === "merchant" && (
               <>
                 <Link to="/provider" search={{ tab: "orders" }} activeProps={active}>الطلبات الحية</Link>
@@ -207,10 +207,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="min-h-screen pb-36 lg:pb-12">{children}</main>
+      <main className="min-h-screen pb-36 md:pb-12">{children}</main>
 
       {/* الشريط السفلي العائم بتصميم الزجاج المصنفر (Floating Frosted Glass Dock) */}
-      <div className="fixed inset-x-0 bottom-3 z-40 px-3 sm:px-0 pointer-events-none lg:hidden mb-[env(safe-area-inset-bottom,0px)]">
+      <div className="fixed inset-x-0 bottom-3 z-40 px-3 sm:px-0 pointer-events-none md:hidden mb-[env(safe-area-inset-bottom,0px)]">
         <nav className="floating-glass-dock pointer-events-auto mx-auto max-w-md flex items-center justify-around py-1 px-1.5 rounded-full shadow-2xl">
           {/* 1. وضع المشتري (افتراضي ونظيف، خالي من أي لوحات أخرى) */}
           {appMode === "customer" && (
