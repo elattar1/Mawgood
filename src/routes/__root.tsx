@@ -21,6 +21,7 @@ import { InAppChatNotifier } from "@/components/InAppChatNotifier";
 import { AccountDeletionInterceptModal } from "@/components/AccountDeletionInterceptModal";
 import { initCapacitorApp } from "@/lib/capacitor";
 import { supabase } from "@/integrations/supabase/client";
+import { offersVisibilityQuery } from "@/lib/use-offers-visibility";
 
 function NotFoundComponent() {
   return (
@@ -63,6 +64,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  loader: ({ context }) => context.queryClient.ensureQueryData(offersVisibilityQuery),
   head: () => ({
     meta: [
       { charSet: "utf-8" },

@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen pb-20 lg:pb-0">
-      <header className="glass-surface sticky top-0 z-40 border-b">
+      <header className="glass-thin sticky top-0 z-40 border-b">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-2">
             <Link to="/" className="flex items-center gap-2">
@@ -168,7 +168,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-h-screen pb-36 lg:pb-12">{children}</main>
 
       {/* الشريط السفلي للهواتف المحمولة: مخصص حسب الوضع النشط، مع بقاء حسابي أقصى الشمال دائمًا */}
-      <nav className="glass-surface fixed inset-x-0 bottom-0 z-40 flex justify-around border-t py-1.5 px-1 lg:hidden">
+      <nav className="glass-thin fixed inset-x-0 bottom-0 z-40 flex justify-around border-t py-1.5 px-1 lg:hidden">
         {/* 1. وضع المشتري (افتراضي ونظيف، خالي من أي لوحات أخرى) */}
         {appMode === "customer" && (
           <>

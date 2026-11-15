@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   Flame,
@@ -21,10 +21,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/lib/cart";
 import { pageMeta } from "@/lib/page-meta";
-import { useOffersVisibility } from "@/lib/use-offers-visibility";
+import { useOffersVisibility, offersVisibilityQuery } from "@/lib/use-offers-visibility";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/offers")({
+  beforeLoad: async ({ context }) => {
+    const isVisible = await context.queryClient.ensureQueryData(offersVisibilityQuery);
+    if (!isVisible) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () =>
     pageMeta(
       "عروض وتخفيضات الحسينية 🔥",

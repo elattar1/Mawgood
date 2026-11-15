@@ -96,20 +96,48 @@ export const getDashboard = createServerFn({ method: "POST" })
     }[] = [];
 
     try {
-      let delQuery = db.from("store_deletion_requests" as any).select("*").order("created_at", { ascending: false });
+      let complaintsQuery = db
+        .from("complaints_suggestions" as any)
+        .select("*")
+        .ilike("title", "%طلب حذف متجر%")
+        .order("created_at", { ascending: false });
+
       if (!data.admin) {
-        delQuery = delQuery.eq("owner_id", context.userId);
+        complaintsQuery = complaintsQuery.eq("user_id", context.userId);
       }
-      const delRes = await delQuery;
-      if (!delRes.error && delRes.data) {
-        storeDeletionRequests = (delRes.data as any[]).map(r => ({
-          ...r,
-          owner_email: r.owner_id ? (userEmailMap.get(r.owner_id) ?? null) : null,
-          owner_name: r.owner_id ? (userNameMap.get(r.owner_id) ?? null) : null,
-        }));
+
+      const compRes = await complaintsQuery;
+      if (!compRes.error && compRes.data) {
+        for (const c of compRes.data as any[]) {
+          const idMatch = c.description?.match(/معرف المتجر \(ID\):\s*([a-f0-9-]+)/i);
+          const matchedStoreId = idMatch ? idMatch[1] : mergedStores.find(s => c.title?.includes(s.name))?.id;
+          const storeName = c.title?.replace("طلب حذف متجر:", "").trim() || "";
+
+          let cleanReason = c.description || "";
+          const reasonHeader = "• سبب طلب الحذف المذكور من صاحب المتجر:";
+          if (cleanReason.includes(reasonHeader)) {
+            cleanReason = cleanReason.split(reasonHeader)[1]?.trim() || cleanReason;
+          }
+
+          if (matchedStoreId) {
+            storeDeletionRequests.push({
+              id: c.id,
+              store_id: matchedStoreId,
+              owner_id: c.user_id,
+              store_name: storeName,
+              reason: cleanReason,
+              status: c.status === "resolved" ? "approved" : c.status === "closed" ? "rejected" : "pending",
+              admin_notes: c.admin_reply,
+              created_at: c.created_at,
+              reviewed_at: c.replied_at,
+              owner_email: userEmailMap.get(c.user_id) ?? null,
+              owner_name: c.customer_name || (userNameMap.get(c.user_id) ?? null),
+            });
+          }
+        }
       }
     } catch (e) {
-      console.warn("Could not fetch store deletion requests:", e);
+      console.warn("Could not fetch store deletion complaints:", e);
     }
 
     const enrichedStores = mergedStores.map(s => ({
@@ -849,7 +877,11 @@ export const deleteStore = createServerFn({ method: "POST" })
 
     // 2. Cascade delete fallback via supabaseAdmin
     try {
-      await supabaseAdmin.from("store_deletion_requests" as any).delete().eq("store_id", data.storeId);
+      try {
+        await supabaseAdmin.from("store_deletion_requests" as any).delete().eq("store_id", data.storeId);
+      } catch {
+        // ignore if table doesn't exist
+      }
       
       const ordersRes = await supabaseAdmin.from("orders").select("id").eq("store_id", data.storeId);
       const orderIds = (ordersRes.data ?? []).map((o: any) => o.id);
@@ -897,7 +929,7 @@ export const requestStoreDeletion = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const store = await context.supabase
       .from("stores")
-      .select("id, name, owner_id")
+      .select("id, name, phone, address, owner_id")
       .eq("id", data.storeId)
       .maybeSingle();
 
@@ -912,29 +944,73 @@ export const requestStoreDeletion = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Check if there is already a pending request
-    const existing = await supabaseAdmin
-      .from("store_deletion_requests" as any)
-      .select("id")
-      .eq("store_id", data.storeId)
-      .eq("status", "pending")
-      .maybeSingle();
+    // 1. Check if there is already a pending request in complaints_suggestions
+    const { data: existingComplaints } = await supabaseAdmin
+      .from("complaints_suggestions" as any)
+      .select("id, user_id, description, status")
+      .ilike("title", "%طلب حذف متجر%")
+      .in("status", ["pending", "in_review"]);
 
-    if (existing.data) {
+    const hasPendingInComplaints = (existingComplaints ?? []).some((c: any) =>
+      c.description?.includes(data.storeId) || (c.user_id === context.userId && c.description?.includes(store.data.name))
+    );
+
+    if (hasPendingInComplaints) {
       throw new Error("يوجد بالفعل طلب حذف قيد المراجعة لهذا المتجر");
     }
 
-    const insertRes = await supabaseAdmin
-      .from("store_deletion_requests" as any)
+    // 2. Fetch owner profile for customer details
+    const profileRes = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, phone")
+      .eq("id", context.userId)
+      .maybeSingle();
+
+    const customerName = profileRes.data?.full_name || store.data.name || "صاحب المتجر";
+    const contactPhone = profileRes.data?.phone || store.data.phone || "";
+
+    const fullDescription = [
+      `طلب رسمي لحذف المتجر من صاحب المتجر:`,
+      `• اسم المتجر: ${store.data.name}`,
+      `• معرف المتجر (ID): ${data.storeId}`,
+      store.data.phone ? `• هاتف المتجر: ${store.data.phone}` : null,
+      store.data.address ? `• عنوان المتجر: ${store.data.address}` : null,
+      ``,
+      `• سبب طلب الحذف المذكور من صاحب المتجر:`,
+      data.reason.trim(),
+    ].filter(Boolean).join("\n");
+
+    // 3. Insert complaint ticket into complaints_suggestions for the admin
+    const insertComplaint = await supabaseAdmin
+      .from("complaints_suggestions" as any)
       .insert({
-        store_id: data.storeId,
-        owner_id: context.userId,
-        store_name: store.data.name,
-        reason: data.reason,
+        user_id: context.userId,
+        customer_name: customerName,
+        phone: contactPhone,
+        type: "complaint",
+        title: `طلب حذف متجر: ${store.data.name}`,
+        description: fullDescription,
         status: "pending",
       });
 
-    if (insertRes.error) throw new Error(insertRes.error.message);
+    if (insertComplaint.error) {
+      throw new Error(insertComplaint.error.message);
+    }
+
+    // 4. Best-effort insert into store_deletion_requests if the table exists
+    try {
+      await supabaseAdmin
+        .from("store_deletion_requests" as any)
+        .insert({
+          store_id: data.storeId,
+          owner_id: context.userId,
+          store_name: store.data.name,
+          reason: data.reason,
+          status: "pending",
+        });
+    } catch {
+      // Table may not exist yet in remote schema cache, safe to ignore
+    }
 
     return { success: true };
   });
@@ -944,28 +1020,57 @@ export const cancelStoreDeletionRequest = createServerFn({ method: "POST" })
   .inputValidator(cancelStoreDeletionRequestInput)
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const req = await supabaseAdmin
-      .from("store_deletion_requests" as any)
-      .select("id, owner_id, status")
-      .eq("id", data.requestId)
-      .maybeSingle();
-
-    if (!req.data) throw new Error("طلب الحذف غير موجود");
-
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     const isAdmin = !!role.data;
 
-    if (!isAdmin && req.data.owner_id !== context.userId) {
-      throw new Error("غير مصرح لك بإلغاء هذا الطلب");
+    // 1. Try finding and removing from complaints_suggestions first
+    const compReq = await supabaseAdmin
+      .from("complaints_suggestions" as any)
+      .select("id, user_id, status")
+      .eq("id", data.requestId)
+      .maybeSingle();
+
+    if (compReq.data) {
+      if (!isAdmin && compReq.data.user_id !== context.userId) {
+        throw new Error("غير مصرح لك بإلغاء هذا الطلب");
+      }
+      const delRes = await supabaseAdmin
+        .from("complaints_suggestions" as any)
+        .delete()
+        .eq("id", data.requestId);
+      if (delRes.error) throw new Error(delRes.error.message);
+
+      try {
+        await supabaseAdmin
+          .from("store_deletion_requests" as any)
+          .delete()
+          .eq("id", data.requestId);
+      } catch {}
+
+      return { success: true };
     }
 
-    const delRes = await supabaseAdmin
-      .from("store_deletion_requests" as any)
-      .delete()
-      .eq("id", data.requestId);
+    // 2. Fallback to store_deletion_requests if present
+    try {
+      const req = await supabaseAdmin
+        .from("store_deletion_requests" as any)
+        .select("id, owner_id, status")
+        .eq("id", data.requestId)
+        .maybeSingle();
 
-    if (delRes.error) throw new Error(delRes.error.message);
-    return { success: true };
+      if (req.data) {
+        if (!isAdmin && req.data.owner_id !== context.userId) {
+          throw new Error("غير مصرح لك بإلغاء هذا الطلب");
+        }
+        await supabaseAdmin
+          .from("store_deletion_requests" as any)
+          .delete()
+          .eq("id", data.requestId);
+        return { success: true };
+      }
+    } catch {}
+
+    throw new Error("طلب الحذف غير موجود أو تم إلغاؤه بالفعل");
   });
 
 export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
@@ -977,70 +1082,124 @@ export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const reqRes = await supabaseAdmin
-      .from("store_deletion_requests" as any)
-      .select("id, store_id, owner_id, store_name, status")
+    // Check if the request is in complaints_suggestions
+    const compRes = await supabaseAdmin
+      .from("complaints_suggestions" as any)
+      .select("id, user_id, title, description, status")
       .eq("id", data.requestId)
       .maybeSingle();
 
-    if (!reqRes.data) throw new Error("طلب الحذف غير موجود");
-    const req = reqRes.data;
+    let storeId: string | null = null;
+    let ownerId: string | null = null;
+    let storeName: string = "";
 
-    if (data.action === "approve") {
-      // 1. Mark request as approved
+    if (compRes.data) {
+      const c = compRes.data;
+      const idMatch = c.description?.match(/معرف المتجر \(ID\):\s*([a-f0-9-]+)/i);
+      storeId = idMatch ? idMatch[1] : null;
+      ownerId = c.user_id;
+      storeName = c.title?.replace("طلب حذف متجر:", "").trim() || "المتجر";
+
+      if (!storeId) {
+        const storeLookup = await supabaseAdmin
+          .from("stores")
+          .select("id, name")
+          .eq("owner_id", ownerId)
+          .maybeSingle();
+        if (storeLookup.data) {
+          storeId = storeLookup.data.id;
+          storeName = storeLookup.data.name;
+        }
+      }
+
+      const newStatus = data.action === "approve" ? "resolved" : "closed";
+      const replyNotes = data.admin_notes ?? (data.action === "approve" ? "تمت الموافقة على حذف المتجر وحذفه نهائياً" : "تم رفض طلب حذف المتجر من قبل الإدارة");
+
       await supabaseAdmin
-        .from("store_deletion_requests" as any)
+        .from("complaints_suggestions" as any)
         .update({
-          status: "approved",
-          admin_notes: data.admin_notes ?? "تمت الموافقة على الحذف من قبل الإدارة",
-          reviewed_at: new Date().toISOString(),
+          status: newStatus,
+          admin_reply: replyNotes,
+          replied_at: new Date().toISOString(),
         })
         .eq("id", data.requestId);
 
-      // 2. Delete the store
-      const rpcRes = await context.supabase.rpc("admin_delete_store", { _store_id: req.store_id });
+      // Best-effort update in store_deletion_requests too
+      try {
+        await supabaseAdmin
+          .from("store_deletion_requests" as any)
+          .update({
+            status: data.action === "approve" ? "approved" : "rejected",
+            admin_notes: replyNotes,
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq("id", data.requestId);
+      } catch {}
+    } else {
+      // Check store_deletion_requests table
+      try {
+        const reqRes = await supabaseAdmin
+          .from("store_deletion_requests" as any)
+          .select("id, store_id, owner_id, store_name, status")
+          .eq("id", data.requestId)
+          .maybeSingle();
+
+        if (reqRes.data) {
+          storeId = reqRes.data.store_id;
+          ownerId = reqRes.data.owner_id;
+          storeName = reqRes.data.store_name;
+
+          await supabaseAdmin
+            .from("store_deletion_requests" as any)
+            .update({
+              status: data.action === "approve" ? "approved" : "rejected",
+              admin_notes: data.admin_notes ?? (data.action === "approve" ? "تمت الموافقة على الحذف من قبل الإدارة" : "تم رفض طلب الحذف من قبل الإدارة"),
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", data.requestId);
+        }
+      } catch {}
+    }
+
+    if (!storeId || !ownerId) {
+      throw new Error("طلب الحذف غير موجود أو لم يتم العثور على المتجر المعني");
+    }
+
+    if (data.action === "approve") {
+      // 1. Delete the store
+      const rpcRes = await context.supabase.rpc("admin_delete_store", { _store_id: storeId });
       if (rpcRes.error) {
         // Fallback cascade delete
-        const ordersRes = await supabaseAdmin.from("orders").select("id").eq("store_id", req.store_id);
+        const ordersRes = await supabaseAdmin.from("orders").select("id").eq("store_id", storeId);
         const orderIds = (ordersRes.data ?? []).map((o: any) => o.id);
         if (orderIds.length > 0) {
           await supabaseAdmin.from("order_messages" as any).delete().in("order_id", orderIds);
           await supabaseAdmin.from("order_items").delete().in("order_id", orderIds);
-          await supabaseAdmin.from("orders").delete().eq("store_id", req.store_id);
+          await supabaseAdmin.from("orders").delete().eq("store_id", storeId);
         }
-        await supabaseAdmin.from("bookings").delete().eq("store_id", req.store_id);
-        await supabaseAdmin.from("service_requests").delete().eq("store_id", req.store_id);
-        await supabaseAdmin.from("reviews").delete().eq("store_id", req.store_id);
-        await supabaseAdmin.from("products").delete().eq("store_id", req.store_id);
-        await supabaseAdmin.from("store_sections").delete().eq("store_id", req.store_id);
-        await supabaseAdmin.from("stores").delete().eq("id", req.store_id);
+        await supabaseAdmin.from("bookings").delete().eq("store_id", storeId);
+        await supabaseAdmin.from("service_requests").delete().eq("store_id", storeId);
+        await supabaseAdmin.from("reviews").delete().eq("store_id", storeId);
+        await supabaseAdmin.from("products").delete().eq("store_id", storeId);
+        await supabaseAdmin.from("store_sections").delete().eq("store_id", storeId);
+        await supabaseAdmin.from("stores").delete().eq("id", storeId);
       }
 
-      // 3. Notify owner
+      // 2. Notify owner
       await supabaseAdmin.from("notifications").insert({
-        user_id: req.owner_id,
+        user_id: ownerId,
         title: "تمت الموافقة على حذف المتجر ✅",
-        body: `تمت الموافقة على طلب حذف متجر «${req.store_name}» وتم حذفه وإزالته من التطبيق نهائياً.`,
+        body: `تمت الموافقة على طلب حذف متجر «${storeName}» وتم حذفه وإزالته من التطبيق نهائياً.${data.admin_notes ? " ملاحظات الإدارة: " + data.admin_notes : ""}`,
         is_read: false,
       });
 
       return { success: true, approved: true };
     } else {
-      // Reject
-      await supabaseAdmin
-        .from("store_deletion_requests" as any)
-        .update({
-          status: "rejected",
-          admin_notes: data.admin_notes ?? "تم رفض طلب الحذف من قبل الإدارة",
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", data.requestId);
-
-      // Notify owner
+      // Reject: notify owner
       await supabaseAdmin.from("notifications").insert({
-        user_id: req.owner_id,
+        user_id: ownerId,
         title: "تم رفض طلب حذف المتجر ❌",
-        body: `تم رفض طلب حذف متجر «${req.store_name}». ${data.admin_notes ? "ملاحظة الإدارة: " + data.admin_notes : ""}`,
+        body: `تم رفض طلب حذف متجر «${storeName}». ${data.admin_notes ? "ملاحظة الإدارة: " + data.admin_notes : ""}`,
         is_read: false,
       });
 

@@ -530,7 +530,7 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                           <h4 className="font-bold text-sm text-foreground">{req.store_name}</h4>
                           <span className="text-[10px] text-muted-foreground">{dateAr(req.created_at)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40">
+                        <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40 whitespace-pre-line">
                           <strong className="text-foreground">السبب:</strong> {req.reason}
                         </p>
                         {req.owner_email && (
@@ -1009,7 +1009,7 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                         <p className="text-xs text-muted-foreground mt-0.5">
                           تم تقديم الطلب بتاريخ {dateAr(currentStorePendingRequest.created_at)}
                         </p>
-                        <p className="text-xs text-foreground/80 mt-2 bg-background/60 p-2.5 rounded-lg border border-border/50">
+                        <p className="text-xs text-foreground/80 mt-2 bg-background/60 p-2.5 rounded-lg border border-border/50 whitespace-pre-line">
                           <strong>سبب الحذف المذكور:</strong> {currentStorePendingRequest.reason}
                         </p>
                       </div>
