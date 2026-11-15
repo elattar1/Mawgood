@@ -148,6 +148,7 @@ export function StoreProducts({
                         src={product.image_url}
                         alt={product.name}
                         loading="lazy"
+                        decoding="async"
                         className="size-20 shrink-0 rounded-xl object-cover border"
                       />
                     )}

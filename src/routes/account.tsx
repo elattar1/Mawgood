@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { compressImageToWebP } from "@/lib/image-compress";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -246,9 +247,10 @@ function AccountPage() {
       let finalImageUrl = complaintImage;
       if (complaintFile) {
         try {
-          const ext = complaintFile.name.split('.').pop() || 'jpg';
+          const compressed = await compressImageToWebP(complaintFile, { maxWidth: 1280, maxHeight: 1280 });
+          const ext = compressed.type === 'image/webp' ? 'webp' : (compressed.name.split('.').pop() || 'jpg');
           const path = `complaints/${user.id}/${crypto.randomUUID()}.${ext}`;
-          const uploadRes = await supabase.storage.from('service-images').upload(path, complaintFile);
+          const uploadRes = await supabase.storage.from('service-images').upload(path, compressed, { contentType: compressed.type });
           if (!uploadRes.error) {
             const { data: pubUrl } = supabase.storage.from('service-images').getPublicUrl(path);
             if (pubUrl?.publicUrl) {

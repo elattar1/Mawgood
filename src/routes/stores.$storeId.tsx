@@ -23,6 +23,7 @@ import { pageMeta } from '@/lib/page-meta';
 import { useCart } from '@/lib/cart';
 import { useAuth } from '@/lib/auth';
 import { createBooking, createServiceRequest } from '@/lib/customer.functions';
+import { compressImageToWebP } from '@/lib/image-compress';
 import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOTS, CATEGORY_ICONS, money } from '@/lib/labels';
 import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
@@ -103,8 +104,10 @@ function StorePage() {
         });
       } else {
         for (const file of files) {
-          const path = `${user.id}/${crypto.randomUUID()}.${file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'}`;
-          const result = await supabase.storage.from('service-images').upload(path, file);
+          const compressed = await compressImageToWebP(file, { maxWidth: 1280, maxHeight: 1280 });
+          const ext = compressed.type === 'image/webp' ? 'webp' : (compressed.name.split('.').pop() || 'jpg');
+          const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+          const result = await supabase.storage.from('service-images').upload(path, compressed, { contentType: compressed.type });
           if (result.error) throw new Error('تعذر رفع الصور');
           uploaded.push(path);
         }
