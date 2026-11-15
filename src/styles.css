@@ -224,6 +224,25 @@ button, a, nav, [role="button"], [role="tab"] {
   box-shadow: var(--shadow-glass-elevated);
 }
 
+/* Floating Navigation Dock — Minimal frosted glass aesthetic with soft warm lighting */
+@utility floating-glass-dock {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    oklch(1 0 0 / 0.88) 0%,
+    oklch(0.99 0.012 80 / 0.82) 48%,
+    oklch(1 0 0 / 0.86) 100%
+  );
+  border: 1px solid oklch(1 0 0 / 0.85);
+  backdrop-filter: blur(32px) saturate(190%) brightness(1.02);
+  -webkit-backdrop-filter: blur(32px) saturate(190%) brightness(1.02);
+  box-shadow:
+    inset 0 1.5px 0 oklch(1 0 0 / 0.95),
+    inset 0 -1px 0 oklch(1 0 0 / 0.40),
+    0 12px 32px -4px oklch(0.2 0.04 196 / 0.16),
+    0 4px 12px -2px oklch(0.2 0.04 196 / 0.08);
+}
+
 /* iOS Bottom Tab Bar — Liquid Glass with balanced translucency & deep frost */
 @utility glass-bottom-nav {
   position: relative;
@@ -343,6 +362,7 @@ button, a, nav, [role="button"], [role="tab"] {
   .glass-thin,
   .glass-bottom-nav,
   .glass-top-header,
+  .floating-glass-dock,
   .liquid-glass,
   .liquid-glass-rect,
   .bg-card {
