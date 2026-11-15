@@ -11,13 +11,16 @@ export function AccountDeletionInterceptModal() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reactivated, setReactivated] = useState(false);
   const [remainingText, setRemainingText] = useState("");
   const [requestedDateText, setRequestedDateText] = useState("");
 
-  const isPendingDeletion = user?.user_metadata?.deletion_status === "pending";
+  const isPendingDeletion =
+    user?.user_metadata?.deletion_status === "pending" &&
+    !!user?.user_metadata?.scheduled_deletion_at;
 
   useEffect(() => {
-    if (!user || !isPendingDeletion) {
+    if (reactivated || !user || !isPendingDeletion) {
       setOpen(false);
       return;
     }
@@ -49,6 +52,7 @@ export function AccountDeletionInterceptModal() {
     // فحص ما إذا كانت المهلة انقضت بالفعل لحذف الحساب نهائياً
     checkAndPurgeAccount()
       .then(async (res) => {
+        if (reactivated) return;
         if (res.status === "purged") {
           toast.error(res.message || "تم حذف الحساب نهائياً بعد انتهاء مهلة الـ 7 أيام.");
           await supabase.auth.signOut();
@@ -56,15 +60,16 @@ export function AccountDeletionInterceptModal() {
         } else if (res.status === "pending") {
           setOpen(true);
           if (res.remainingTime) setRemainingText(res.remainingTime);
+        } else if (res.status === "active" || res.status === "none") {
+          setOpen(false);
         }
       })
       .catch((e) => {
         console.error("Check purge error:", e);
-        setOpen(true);
       });
-  }, [user, isPendingDeletion]);
+  }, [user, isPendingDeletion, reactivated]);
 
-  if (!open || !user || !isPendingDeletion) {
+  if (reactivated || !open || !user || !isPendingDeletion) {
     return null;
   }
 
@@ -72,13 +77,39 @@ export function AccountDeletionInterceptModal() {
   async function handleReactivate() {
     setBusy(true);
     try {
-      const res = await reactivateAccount();
-      toast.success(res.message || "تم إعادة تنشيط حسابك بنجاح! يسعدنا استمرارك معنا.");
+      // إغلاق النافذة فوراً وتثبيت حالة التنشيط لمنع أي وميض
+      setReactivated(true);
       setOpen(false);
-      // تحديث الجلسة لتحديث الـ user_metadata في المتصفح
-      await supabase.auth.refreshSession();
-      window.location.reload();
+
+      // 1. استدعاء السيرفر لحفظ إلغاء الحذف وتنشيط الحساب بصلاحيات كاملة
+      const res = await reactivateAccount();
+
+      // 2. تحديث بيانات المستخدم في جلسة العميل فوراً لتزامن فوري
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            deletion_status: "active",
+            scheduled_deletion_at: null,
+            deletion_requested_at: null,
+            deletion_code: null,
+            deletion_code_expires_at: null,
+          },
+        });
+      } catch (clientErr) {
+        console.warn("Client update user error:", clientErr);
+      }
+
+      // 3. تحديث التوكن في الجلسة
+      try {
+        await supabase.auth.refreshSession();
+      } catch (refErr) {
+        console.warn("Refresh session error:", refErr);
+      }
+
+      toast.success(res.message || "تم إعادة تنشيط حسابك بنجاح! يسعدنا استمرارك معنا.");
     } catch (err: any) {
+      setReactivated(false);
+      setOpen(true);
       toast.error(err?.message || "تعذر إعادة تنشيط الحساب، يرجى المحاولة لاحقاً");
     } finally {
       setBusy(false);

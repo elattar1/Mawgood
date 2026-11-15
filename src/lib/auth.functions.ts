@@ -491,16 +491,30 @@ export const reactivateAccount = createServerFn({ method: "POST" })
     const user = userRes.data?.user;
     if (!user) throw new Error("تعذر تحديد بيانات المستخدم");
 
-    const newMetadata = { ...(user.user_metadata || {}) };
-    delete newMetadata.deletion_status;
-    delete newMetadata.deletion_requested_at;
-    delete newMetadata.scheduled_deletion_at;
-    delete newMetadata.deletion_code;
-    delete newMetadata.deletion_code_expires_at;
+    const updatedMetadata = {
+      ...(user.user_metadata || {}),
+      deletion_status: "active",
+      deletion_requested_at: null,
+      scheduled_deletion_at: null,
+      deletion_code: null,
+      deletion_code_expires_at: null,
+    };
 
-    await supabaseAdmin.auth.admin.updateUserById(context.userId, {
-      user_metadata: newMetadata,
+    const updateRes = await supabaseAdmin.auth.admin.updateUserById(context.userId, {
+      user_metadata: updatedMetadata,
     });
+    if (updateRes.error) throw new Error(updateRes.error.message);
+
+    try {
+      await supabaseAdmin.from("notifications").insert({
+        user_id: context.userId,
+        title: "تم إعادة تنشيط حسابك بنجاح ✅",
+        body: "تم إلغاء طلب حذف الحساب بنجاح، ويمكنك الآن مواصلة استخدام خدمات الحسينية بشكل طبيعي.",
+        is_read: false,
+      });
+    } catch (nErr) {
+      console.warn("Could not insert reactivation notification:", nErr);
+    }
 
     return {
       success: true,
