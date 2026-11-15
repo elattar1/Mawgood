@@ -72,6 +72,8 @@ import { money, dateAr, STATUS_LABELS } from "@/lib/labels";
 import { cleanOrderNotes } from "@/lib/utils";
 import { cleanDisplayAddress } from "@/lib/map-utils";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
+import { ChatUnreadBadge } from "@/components/ChatUnreadBadge";
+import { useOrderChatUnreadMap } from "@/lib/chat-unread";
 import { useAuth } from "@/lib/auth";
 
 type StoreRow = DashboardData["stores"][number];
@@ -200,6 +202,7 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
   const tasks = allTasks.filter(t => admin || t.store_id === store?.id);
   const totals = earnings(tasks);
   const pending = tasks.filter(t => !["delivered", "completed", "cancelled"].includes(t.status)).length;
+  const { getUnreadCount } = useOrderChatUnreadMap(data.orders);
 
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window !== "undefined") {
@@ -1550,10 +1553,11 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1.5 text-xs font-bold text-primary border-primary/30 hover:bg-primary/10"
+                      className="relative h-8 gap-1.5 text-xs font-bold text-primary border-primary/30 hover:bg-primary/10"
                       onClick={() => setChatOrderId(t.id)}
                       title="محادثة العميل والكابتن"
                     >
+                      <ChatUnreadBadge count={getUnreadCount(t.id)} />
                       <MessageCircle className="size-3.5" />
                       محادثة العميل
                     </Button>
@@ -2084,9 +2088,10 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="gap-2 border-primary/30 text-primary hover:bg-primary/10 font-bold"
+                    className="relative gap-2 border-primary/30 text-primary hover:bg-primary/10 font-bold"
                     onClick={() => setChatOrderId(currentDetail.id)}
                   >
+                    <ChatUnreadBadge count={getUnreadCount(currentDetail.id)} />
                     <MessageCircle className="size-4" />
                     محادثة العميل والكابتن
                   </Button>

@@ -497,3 +497,17 @@ export async function notifyOrderStatusUpdate(
     console.error("notifyOrderStatusUpdate failed:", e);
   }
 }
+
+export const readOrderChatNotifications = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ orderId: z.string().uuid() }))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const result = await supabaseAdmin
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", context.userId)
+      .ilike("link", `%chat=${data.orderId}%`);
+    if (result.error) throw new Error("تعذر تحديث إشعارات المحادثة");
+    return { success: true };
+  });

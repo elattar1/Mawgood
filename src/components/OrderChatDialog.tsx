@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getOrderChat, sendOrderChatMessage, type OrderChatInfo } from "@/lib/chat.functions";
+import { useOrderChatUnreadMap } from "@/lib/chat-unread";
 
 interface OrderChatDialogProps {
   orderId: string | null;
@@ -78,16 +79,18 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
   const getChat = useServerFn(getOrderChat);
   const sendMessage = useServerFn(sendOrderChatMessage);
   const qc = useQueryClient();
+  const { markChatAsRead } = useOrderChatUnreadMap();
 
   const [inputMessage, setInputMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef<number>(0);
 
-  // Set active chat order in global window state so notifications know chat is open
+  // Set active chat order in global window state and mark unread messages as read
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (open && orderId) {
       (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID = orderId;
+      markChatAsRead(orderId);
     } else if (!open && (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID === orderId) {
       (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID = null;
     }
@@ -96,7 +99,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
         (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID = null;
       }
     };
-  }, [open, orderId]);
+  }, [open, orderId, markChatAsRead]);
 
   const queryKey = ["order-chat", orderId];
 

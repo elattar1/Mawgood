@@ -17,8 +17,10 @@ import { money, dateAr } from "@/lib/labels";
 import { pageMeta } from "@/lib/page-meta";
 import { cleanOrderNotes } from "@/lib/utils";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
+import { ChatUnreadBadge } from "@/components/ChatUnreadBadge";
 import { extractCoordinates, cleanDisplayAddress, getGoogleNavigationUrl, getGoogleMapsPinUrl } from "@/lib/map-utils";
 import { playNewOrderAlert } from "@/lib/order-alert";
+import { useOrderChatUnreadMap } from "@/lib/chat-unread";
 
 export const Route = createFileRoute("/_authenticated/delivery")({
   validateSearch: (s: Record<string, unknown>) => ({ tab: ["available", "current", "wallet"].includes(String(s["tab"])) ? String(s["tab"]) : "available" }),
@@ -54,6 +56,7 @@ function Delivery() {
   const current = data.mine.filter(o => o.status === "on_the_way");
   const wallet = driverWallet(data.mine);
   const isWorking = !!data.driver?.is_active;
+  const { getUnreadCount } = useOrderChatUnreadMap(data.mine);
 
   // تشغيل تنبيه نغمة واهتزاز خفيف عند ظهور طلبات جديدة بالرادار إذا كان السائق شغالاً
   useEffect(() => {
@@ -379,8 +382,9 @@ function Delivery() {
                       type="button"
                       variant="default"
                       onClick={() => setChatOrderId(o.id)}
-                      className="flex-1 font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground h-10 shadow-sm"
+                      className="relative flex-1 font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground h-10 shadow-sm"
                     >
+                      <ChatUnreadBadge count={getUnreadCount(o.id)} />
                       <MessageCircle className="size-4" />
                       محادثة العميل
                     </Button>

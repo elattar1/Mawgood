@@ -19,6 +19,8 @@ import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
 import { PushNotificationControls } from '@/components/PushNotificationControls';
 import { OrderChatDialog } from '@/components/OrderChatDialog';
 import { OrderReviewDialog } from '@/components/OrderReviewDialog';
+import { ChatUnreadBadge } from '@/components/ChatUnreadBadge';
+import { useOrderChatUnreadMap } from '@/lib/chat-unread';
 
 export const Route = createFileRoute('/_authenticated/orders')({
   validateSearch: (s: SearchSchemaInput & { filter?: unknown; chat?: unknown }) => ({
@@ -65,6 +67,7 @@ function Orders() {
   const [chatOrderId, setChatOrderId] = useState<string | null>(chat || null);
   const [reviewOrder, setReviewOrder] = useState<any | null>(null);
   const [reviewsVersion, setReviewsVersion] = useState(0);
+  const { getUnreadCount } = useOrderChatUnreadMap(data?.orders);
 
   useEffect(() => {
     if (chat) {
@@ -296,9 +299,10 @@ function Orders() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      className="relative gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                       onClick={() => setChatOrderId(r.id)}
                     >
+                      <ChatUnreadBadge count={getUnreadCount(r.id)} />
                       <MessageCircle className="size-3.5" />
                       سجل المحادثة (مغلقة)
                     </Button>
@@ -306,13 +310,14 @@ function Orders() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className={`gap-2 font-bold ${
+                      className={`relative gap-2 font-bold ${
                         r.status === 'on_the_way'
                           ? 'border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10'
                           : 'border-primary/40 text-primary hover:bg-primary/10'
                       }`}
                       onClick={() => setChatOrderId(r.id)}
                     >
+                      <ChatUnreadBadge count={getUnreadCount(r.id)} />
                       {r.status === 'on_the_way' ? (
                         <>
                           <Bike className="size-4" />
