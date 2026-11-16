@@ -25,6 +25,8 @@ import {
   Crosshair,
   Check,
   UserX,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,11 @@ import { pageMeta } from "@/lib/page-meta";
 import { MapLocationPicker } from "@/components/MapLocationPicker";
 import { extractCoordinates, cleanDisplayAddress, formatAddressWithCoordinates } from "@/lib/map-utils";
 import { DeleteAccountModal } from "@/components/DeleteAccountModal";
+import {
+  playCustomerOrderAlert,
+  getCustomerSoundEnabled,
+  setCustomerSoundEnabled,
+} from "@/lib/order-alert";
 import {
   submitCustomerComplaint,
   submitDriverApplication,
@@ -82,6 +89,7 @@ function AccountPage() {
   const { user, isAdmin, isDriver, isProvider, appMode, setAppMode } = useAuth();
   const client = useQueryClient();
   const navigate = useNavigate();
+  const [customerSound, setCustomerSound] = useState(() => getCustomerSoundEnabled());
 
   const handleSwitchMode = (mode: "customer" | "merchant" | "driver" | "admin") => {
     setAppMode(mode);
@@ -705,6 +713,48 @@ function AccountPage() {
                 <span>الإشعارات والتنبيهات</span>
                 <span className="text-xs font-mono">&larr;</span>
               </Link>
+            </div>
+          </div>
+
+          {/* إعدادات التنبيهات والأصوات للعميل */}
+          <div className="rounded-xl border bg-card p-5 shadow-soft space-y-3">
+            <h3 className="font-semibold text-sm text-foreground flex items-center justify-between">
+              <span>تنبيهات وأصوات الطلبات</span>
+              <Volume2 className="size-4 text-primary" />
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              تشغيل نغمة لطيفة واهتزاز خفيف عند قبول طلبك أو خروج الكابتن لتوصيله إليك.
+            </p>
+            <div className="flex items-center justify-between pt-1">
+              <Button
+                variant={customerSound ? "outline" : "secondary"}
+                size="sm"
+                className="gap-2 text-xs font-bold"
+                onClick={() => {
+                  const next = !customerSound;
+                  setCustomerSound(next);
+                  setCustomerSoundEnabled(next);
+                  if (next) {
+                    playCustomerOrderAlert("on_the_way", true);
+                    toast.info("تم تفعيل صوت تنبيهات الطلبات 🔔");
+                  } else {
+                    toast.info("تم كتم صوت تنبيهات الطلبات 🔕");
+                  }
+                }}
+              >
+                {customerSound ? <Volume2 className="size-3.5 text-primary" /> : <VolumeX className="size-3.5 text-muted-foreground" />}
+                {customerSound ? "صوت التنبيهات: مفعّل" : "صوت التنبيهات: صامت"}
+              </Button>
+              {customerSound && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-primary font-bold"
+                  onClick={() => playCustomerOrderAlert("on_the_way", true)}
+                >
+                  تجربة النغمة 🎵
+                </Button>
+              )}
             </div>
           </div>
 

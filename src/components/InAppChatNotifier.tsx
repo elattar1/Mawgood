@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, X, Store, Bike, BellRing, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth";
@@ -7,6 +8,7 @@ import { getNotifications, readNotification } from "@/lib/customer.functions";
 import { registerPushDevice } from "@/lib/push.functions";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { Button } from "@/components/ui/button";
+import { playCustomerOrderAlert, getCustomerSoundEnabled } from "@/lib/order-alert";
 
 function playMessageChime() {
   try {
@@ -45,12 +47,16 @@ export function InAppChatNotifier() {
   const markRead = useServerFn(readNotification);
   const registerDevice = useServerFn(registerPushDevice);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const [activeBanner, setActiveBanner] = useState<{
     id: string;
     orderId: string;
     title: string;
     body: string;
+    isOrderStatus?: boolean;
+    detectedStatus?: string;
+    link?: string;
   } | null>(null);
 
   const [openChatOrderId, setOpenChatOrderId] = useState<string | null>(null);
@@ -139,7 +145,11 @@ export function InAppChatNotifier() {
     const unread = notifications.find(
       (n: any) =>
         !n.is_read &&
-        (n.title.includes("رسالة") || n.link?.includes("chat=") || n.title.includes("طلبك") || n.title.includes("طلب")) &&
+        (n.title.includes("رسالة") ||
+          n.link?.includes("chat=") ||
+          n.title.includes("طلبك") ||
+          n.title.includes("طلب") ||
+          n.title.includes("حالة")) &&
         !seenNotificationIdsRef.current.has(n.id)
     );
 
@@ -150,6 +160,8 @@ export function InAppChatNotifier() {
       let extractedOrderId = "";
       if (unread.link && unread.link.includes("chat=")) {
         extractedOrderId = unread.link.split("chat=")[1].split("&")[0];
+      } else if (unread.link && unread.link.includes("order=")) {
+        extractedOrderId = unread.link.split("order=")[1].split("&")[0];
       }
 
       // Requirement: When chat dialog is currently open for that order,
@@ -164,23 +176,51 @@ export function InAppChatNotifier() {
         return;
       }
 
-      if (extractedOrderId) {
-        // Show banner and play sound
-        setActiveBanner({
-          id: unread.id,
-          orderId: extractedOrderId,
-          title: unread.title,
-          body: unread.body,
-        });
+      const isOrderStatus =
+        unread.title.includes("طلبك") ||
+        unread.title.includes("حالة") ||
+        unread.title.includes("استلم") ||
+        unread.title.includes("تأكيد") ||
+        unread.title.includes("تحضير") ||
+        unread.title.includes("تسليم") ||
+        unread.title.includes("إلغاء");
 
-        playMessageChime();
-
-        // Auto dismiss after 6 seconds
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => {
-          setActiveBanner(null);
-        }, 6000);
+      let detectedStatus = "general";
+      if (unread.title.includes("طريق") || unread.body.includes("طريق")) {
+        detectedStatus = "on_the_way";
+      } else if (unread.title.includes("تحضير") || unread.body.includes("تحضير")) {
+        detectedStatus = "preparing";
+      } else if (unread.title.includes("قبول") || unread.title.includes("تأكيد") || unread.body.includes("تأكيد")) {
+        detectedStatus = "accepted";
+      } else if (unread.title.includes("تسليم") || unread.title.includes("نجاح")) {
+        detectedStatus = "delivered";
+      } else if (unread.title.includes("إلغاء") || unread.title.includes("الغاء")) {
+        detectedStatus = "cancelled";
       }
+
+      // Show banner and play sound
+      setActiveBanner({
+        id: unread.id,
+        orderId: extractedOrderId,
+        title: unread.title,
+        body: unread.body,
+        isOrderStatus,
+        detectedStatus,
+        link: unread.link,
+      });
+
+      if (isOrderStatus) {
+        const soundEnabled = getCustomerSoundEnabled();
+        playCustomerOrderAlert(detectedStatus, soundEnabled);
+      } else {
+        playMessageChime();
+      }
+
+      // Auto dismiss after 6 seconds
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setActiveBanner(null);
+      }, 6000);
     }
   }, [notifications, user, openChatOrderId]);
 
@@ -188,10 +228,20 @@ export function InAppChatNotifier() {
     if (!activeBanner) return;
     const targetOrderId = activeBanner.orderId;
     const notifId = activeBanner.id;
+    const notifLink = activeBanner.link;
+    const isStatus = activeBanner.isOrderStatus;
+
     setActiveBanner(null);
     setTouchDeltaY(0);
     markAsReadMutation.mutate(notifId);
-    setOpenChatOrderId(targetOrderId);
+
+    if (targetOrderId && (!isStatus || notifLink?.includes("chat="))) {
+      setOpenChatOrderId(targetOrderId);
+    } else if (notifLink) {
+      navigate({ to: notifLink });
+    } else {
+      navigate({ to: "/orders" });
+    }
   }
 
   function handleDismiss(e?: React.MouseEvent) {
@@ -296,10 +346,12 @@ export function InAppChatNotifier() {
             <div className="flex items-start justify-between gap-3 pt-1">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs">
-                  {activeBanner.title.includes("المتجر") ? (
+                  {activeBanner.detectedStatus === "delivered" ? (
+                    <CheckCircle2 className="size-5 text-emerald-600" />
+                  ) : activeBanner.title.includes("الكابتن") || activeBanner.title.includes("التوصيل") || activeBanner.detectedStatus === "on_the_way" ? (
+                    <Bike className="size-5 text-emerald-600 animate-bounce" />
+                  ) : activeBanner.title.includes("المتجر") || activeBanner.detectedStatus === "preparing" || activeBanner.detectedStatus === "accepted" ? (
                     <Store className="size-5 text-primary" />
-                  ) : activeBanner.title.includes("الكابتن") || activeBanner.title.includes("التوصيل") ? (
-                    <Bike className="size-5 text-emerald-600" />
                   ) : (
                     <MessageSquare className="size-5 text-primary" />
                   )}

@@ -1,5 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { playNewOrderAlert, playNewOrderChime, triggerSoftVibration } from "@/lib/order-alert";
+import {
+  playNewOrderAlert,
+  playNewOrderChime,
+  triggerSoftVibration,
+  playCustomerOrderAlert,
+  playCustomerOrderStatusChime,
+  getCustomerSoundEnabled,
+  setCustomerSoundEnabled,
+} from "@/lib/order-alert";
 
 describe("Order Alert System (sound and vibration)", () => {
   let vibrateMock: ReturnType<typeof vi.fn>;
@@ -11,6 +19,7 @@ describe("Order Alert System (sound and vibration)", () => {
       writable: true,
       configurable: true,
     });
+    localStorage.clear();
   });
 
   it("triggers soft vibration with specified or default pattern", () => {
@@ -31,8 +40,6 @@ describe("Order Alert System (sound and vibration)", () => {
   });
 
   it("plays chime and triggers vibration when sound is enabled", () => {
-    const playChimeSpy = vi.fn();
-    // Test playNewOrderAlert with true
     playNewOrderAlert(true);
     expect(vibrateMock).toHaveBeenCalledWith([180, 80, 220]);
   });
@@ -41,5 +48,32 @@ describe("Order Alert System (sound and vibration)", () => {
     vibrateMock.mockClear();
     playNewOrderAlert(false);
     expect(vibrateMock).toHaveBeenCalledWith([180, 80, 220]);
+  });
+
+  it("plays customer order alert with tailored vibration and does not throw", () => {
+    vibrateMock.mockClear();
+    expect(() => playCustomerOrderAlert("preparing", true)).not.toThrow();
+    expect(vibrateMock).toHaveBeenCalledWith([140, 70, 180]);
+
+    vibrateMock.mockClear();
+    expect(() => playCustomerOrderAlert("on_the_way", true)).not.toThrow();
+    expect(vibrateMock).toHaveBeenCalledWith([180, 80, 240, 80, 240]);
+
+    vibrateMock.mockClear();
+    expect(() => playCustomerOrderAlert("delivered", false)).not.toThrow();
+    expect(vibrateMock).toHaveBeenCalledWith([140, 70, 180]);
+
+    expect(() => playCustomerOrderStatusChime("cancelled")).not.toThrow();
+    expect(() => playCustomerOrderStatusChime("unknown")).not.toThrow();
+  });
+
+  it("manages customer sound preferences via localStorage correctly", () => {
+    expect(getCustomerSoundEnabled()).toBe(true);
+
+    setCustomerSoundEnabled(false);
+    expect(getCustomerSoundEnabled()).toBe(false);
+
+    setCustomerSoundEnabled(true);
+    expect(getCustomerSoundEnabled()).toBe(true);
   });
 });

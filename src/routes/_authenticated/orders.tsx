@@ -2,8 +2,8 @@ import type { SearchSchemaInput } from '@tanstack/react-router';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useState, useEffect } from 'react';
-import { RefreshCw, Package, Check, X, MapPin, MessageCircle, Store, Bike, Star } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { RefreshCw, Package, Check, X, MapPin, MessageCircle, Store, Bike, Star, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/AppShell';
@@ -21,6 +21,7 @@ import { OrderChatDialog } from '@/components/OrderChatDialog';
 import { OrderReviewDialog } from '@/components/OrderReviewDialog';
 import { ChatUnreadBadge } from '@/components/ChatUnreadBadge';
 import { useOrderChatUnreadMap } from '@/lib/chat-unread';
+import { playCustomerOrderAlert, getCustomerSoundEnabled, setCustomerSoundEnabled } from '@/lib/order-alert';
 
 export const Route = createFileRoute('/_authenticated/orders')({
   validateSearch: (s: SearchSchemaInput & { filter?: unknown; chat?: unknown }) => ({
@@ -68,6 +69,53 @@ function Orders() {
   const [reviewOrder, setReviewOrder] = useState<any | null>(null);
   const [reviewsVersion, setReviewsVersion] = useState(0);
   const { getUnreadCount } = useOrderChatUnreadMap(data?.orders);
+
+  const [soundEnabled, setSoundEnabled] = useState(() => getCustomerSoundEnabled());
+
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setCustomerSoundEnabled(next);
+    if (next) {
+      playCustomerOrderAlert("preparing", true);
+      toast.info("تم تفعيل صوت تنبيهات حالات الطلب 🔔");
+    } else {
+      toast.info("تم كتم صوت تنبيهات حالات الطلب 🔕");
+    }
+  };
+
+  const prevStatusesRef = useRef<Map<string, string>>(new Map());
+  const isFirstRender = useRef(true);
+
+  // مراقبة تغير حالات الطلبات وتشغيل التنبيه الصوتي المخصص للعميل عند تغير حالة أي طلب
+  useEffect(() => {
+    const currentOrders = data?.orders ?? [];
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      currentOrders.forEach((o) => {
+        prevStatusesRef.current.set(o.id, o.status);
+      });
+      return;
+    }
+
+    let alertTriggered = false;
+    for (const o of currentOrders) {
+      const oldStatus = prevStatusesRef.current.get(o.id);
+      if (oldStatus && oldStatus !== o.status) {
+        if (!alertTriggered) {
+          playCustomerOrderAlert(o.status, soundEnabled);
+          alertTriggered = true;
+        }
+
+        const storeName = catalog?.stores.find((s) => s.id === o.store_id)?.name || 'المتجر';
+        const label = STATUS_LABELS[o.status] || o.status;
+        toast.info(`🔔 تحديث في طلبك من ${storeName}: أصبح "${label}"`, {
+          duration: 5000,
+        });
+      }
+      prevStatusesRef.current.set(o.id, o.status);
+    }
+  }, [data?.orders, catalog?.stores, soundEnabled]);
 
   useEffect(() => {
     if (chat) {
@@ -174,15 +222,26 @@ function Orders() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-7 flex items-center justify-between">
         <h1 className="text-3xl font-bold">طلباتي وحجوزاتي</h1>
-        <Button
-          variant="outline"
-          size="icon"
-          title="تحديث الطلبات"
-          aria-label="تحديث الطلبات"
-          onClick={() => client.invalidateQueries({ queryKey: ['customer-orders'] })}
-        >
-          <RefreshCw />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={soundEnabled ? "كتم صوت تنبيهات الطلبات" : "تفعيل صوت تنبيهات الطلبات"}
+            title={soundEnabled ? "صوت تنبيهات الطلبات مفعّل (انقر للكتم)" : "صوت تنبيهات الطلبات صامت (انقر للتفعيل)"}
+            onClick={toggleSound}
+          >
+            {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            title="تحديث الطلبات"
+            aria-label="تحديث الطلبات"
+            onClick={() => client.invalidateQueries({ queryKey: ['customer-orders'] })}
+          >
+            <RefreshCw className="size-4" />
+          </Button>
+        </div>
       </div>
 
       <PushNotificationControls />
