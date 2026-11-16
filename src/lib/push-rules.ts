@@ -45,6 +45,22 @@ export function formatCancellationNotification(params: {
       chatMessage: 'قام العميل بإلغاء هذا الطلب.',
     };
   }
+  if (params.cancelledBy === 'admin') {
+    return {
+      target: 'both' as const,
+      title: `❌ تنبيه: تم إلغاء طلبك من قِبل إدارة المنصة`,
+      customerTitle: `❌ تنبيه: تم إلغاء طلبك من قِبل إدارة المنصة`,
+      customerBody: params.note
+        ? `قامت إدارة المنصة بإلغاء طلبك رقم #${shortId}: ${params.note}`
+        : `قامت إدارة المنصة بإلغاء طلبك رقم #${shortId}.`,
+      storeTitle: `❌ تم إلغاء الطلب #${shortId} من قِبل الإدارة`,
+      storeBody: params.note
+        ? `قامت إدارة المنصة بإلغاء الطلب رقم #${shortId}: ${params.note}. يرجى التوقف عن تحضير الطلب.`
+        : `قامت إدارة المنصة بإلغاء الطلب رقم #${shortId}. يرجى التوقف عن تحضير الطلب.`,
+      path: '/orders?filter=cancelled',
+      chatMessage: params.note ? `قامت إدارة المنصة بإلغاء هذا الطلب: ${params.note}` : 'قامت إدارة المنصة بإلغاء هذا الطلب.',
+    };
+  }
   return {
     target: 'customer' as const,
     title: `❌ اعتذار: تم إلغاء طلبك من قِبل ${params.storeName}`,
@@ -55,6 +71,27 @@ export function formatCancellationNotification(params: {
     chatMessage: params.note
       ? `قام ${params.storeName} بإلغاء هذا الطلب: ${params.note}`
       : `قام ${params.storeName} بإلغاء هذا الطلب.`,
+  };
+}
+
+export function formatStoreProgressionNotification(params: {
+  orderId: string;
+  status: 'on_the_way' | 'delivered';
+  driverName?: string;
+}) {
+  const shortId = params.orderId.slice(0, 8);
+  const drLabel = params.driverName ? `الكابتن ${params.driverName}` : 'كابتن التوصيل';
+  if (params.status === 'on_the_way') {
+    return {
+      title: `🛵 تم استلام طلبك (#${shortId}) بواسطة ${drLabel}`,
+      body: `بدأ ${drLabel} توصيل الطلب رقم #${shortId} وهو الآن في الطريق للعميل.`,
+      path: `/provider?tab=orders&order=${params.orderId}`,
+    };
+  }
+  return {
+    title: `🎉 تم تسليم الطلب (#${shortId}) للعميل بنجاح`,
+    body: `قام كابتن التوصيل بتسليم الطلب (#${shortId}) للعميل وتحصيل المبلغ بنجاح.`,
+    path: `/provider?tab=orders&order=${params.orderId}`,
   };
 }
 

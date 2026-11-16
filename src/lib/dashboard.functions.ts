@@ -865,6 +865,7 @@ export const sendBroadcastNotification = createServerFn({ method: "POST" })
       user_id: uid,
       title: data.title,
       body: data.body,
+      link: data.path || "/",
       is_read: false,
       created_at: now,
     }));

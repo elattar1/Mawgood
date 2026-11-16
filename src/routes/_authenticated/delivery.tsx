@@ -23,7 +23,14 @@ import { playNewOrderAlert } from "@/lib/order-alert";
 import { useOrderChatUnreadMap } from "@/lib/chat-unread";
 
 export const Route = createFileRoute("/_authenticated/delivery")({
-  validateSearch: (s: Record<string, unknown>) => ({ tab: ["available", "current", "wallet"].includes(String(s["tab"])) ? String(s["tab"]) : "available" }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    tab: ["available", "current", "wallet"].includes(String(s["tab"]))
+      ? String(s["tab"])
+      : s["chat"]
+      ? "current"
+      : "available",
+    chat: typeof s["chat"] === "string" ? s["chat"] : undefined,
+  }),
   loader: ({ context }) => context.queryClient.ensureQueryData(driverBoardQuery),
   head: () => pageMeta("لوحة كابتن الدليفري", "الطلبات المتاحة والتوصيل الحالي وحساب أرباح كابتن خدمات الحسينية"),
   component: Delivery,
@@ -36,12 +43,18 @@ type DeliveryOrder = Awaited<ReturnType<typeof getDriverBoard>>["mine"][number];
 function Delivery() {
   const { data, isFetching } = useSuspenseQuery({ ...driverBoardQuery, refetchInterval: 15_000 });
   const qc = useQueryClient();
-  const { tab } = Route.useSearch();
+  const { tab, chat } = Route.useSearch();
   const navigate = Route.useNavigate();
   const claim = useServerFn(claimOrder), complete = useServerFn(completeOrder);
   const setWorkingStatus = useServerFn(setMyDriverWorkingStatus);
   const [confirm, setConfirm] = useState<DeliveryOrder | null>(null);
-  const [chatOrderId, setChatOrderId] = useState<string | null>(null);
+  const [chatOrderId, setChatOrderId] = useState<string | null>(chat || null);
+
+  useEffect(() => {
+    if (chat) {
+      setChatOrderId(chat);
+    }
+  }, [chat]);
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window !== "undefined") {
       try {

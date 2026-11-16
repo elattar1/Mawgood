@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2 } from "lucide-react";
+import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2, AlertCircle, Megaphone, Bell } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth";
@@ -173,6 +173,7 @@ export function InAppChatNotifier() {
         () => {
           qc.invalidateQueries({ queryKey: ["in-app-chat-notifications", user.id] });
           qc.invalidateQueries({ queryKey: ["notifications"] });
+          qc.invalidateQueries({ queryKey: ["unread"] });
           qc.invalidateQueries({ queryKey: ["customer-orders"] });
         }
       )
@@ -183,20 +184,13 @@ export function InAppChatNotifier() {
     };
   }, [user?.id, qc]);
 
-  // Check for incoming chat messages & order update notifications
+  // Check for incoming notifications (orders, chat, broadcasts, appointments)
   useEffect(() => {
     if (!notifications || !Array.isArray(notifications) || !user) return;
 
-    // Filter all new unread chat or order notifications
+    // Filter all new unread notifications that have not been seen
     const unreadList = notifications.filter(
-      (n: any) =>
-        !n.is_read &&
-        (n.title.includes("رسالة") ||
-          n.link?.includes("chat=") ||
-          n.title.includes("طلبك") ||
-          n.title.includes("طلب") ||
-          n.title.includes("حالة")) &&
-        !seenNotificationIdsRef.current.has(n.id)
+      (n: any) => !n.is_read && !seenNotificationIdsRef.current.has(n.id)
     );
 
     if (unreadList.length === 0) return;
@@ -380,12 +374,18 @@ export function InAppChatNotifier() {
                     <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs">
                       {banner.detectedStatus === "delivered" ? (
                         <CheckCircle2 className="size-5 text-emerald-600" />
+                      ) : banner.detectedStatus === "cancelled" || banner.title.includes("إلغاء") || banner.title.includes("اعتذار") ? (
+                        <AlertCircle className="size-5 text-destructive" />
                       ) : banner.title.includes("الكابتن") || banner.title.includes("التوصيل") || banner.detectedStatus === "on_the_way" ? (
                         <Bike className="size-5 text-emerald-600 animate-bounce" />
                       ) : banner.title.includes("المتجر") || banner.detectedStatus === "preparing" || banner.detectedStatus === "accepted" ? (
                         <Store className="size-5 text-primary" />
-                      ) : (
+                      ) : banner.title.includes("رسالة") || banner.link?.includes("chat=") ? (
                         <MessageSquare className="size-5 text-primary" />
+                      ) : banner.title.includes("إعلان") || banner.title.includes("تنويه") || banner.title.includes("تخفيض") ? (
+                        <Megaphone className="size-5 text-amber-600" />
+                      ) : (
+                        <Bell className="size-5 text-primary" />
                       )}
                     </div>
 

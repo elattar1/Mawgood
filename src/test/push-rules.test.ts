@@ -4,6 +4,7 @@ import {
   isStalePushToken,
   formatOrderPushPayload,
   formatCancellationNotification,
+  formatStoreProgressionNotification,
   determineChatNotificationRecipient,
 } from '../lib/push-rules';
 
@@ -80,6 +81,40 @@ describe('push delivery rules', () => {
     expect(res.body).toContain('الأصناف المطلوبة نفذت من المخزن');
     expect(res.path).toContain('/orders?filter=cancelled');
     expect(res.chatMessage).toContain('الأصناف المطلوبة نفذت من المخزن');
+  });
+
+  it('formats admin cancellation targeting both customer and store owner', () => {
+    const res = formatCancellationNotification({
+      orderId: 'a1b2c3d4-1234-5678-90ab-cdef12345678',
+      storeName: 'الآن ماركت',
+      cancelledBy: 'admin',
+      note: 'مخالفة معايير الجودة',
+    });
+
+    expect(res.target).toBe('both');
+    expect(res.customerTitle).toContain('تم إلغاء طلبك من قِبل إدارة المنصة');
+    expect(res.customerBody).toContain('مخالفة معايير الجودة');
+    expect(res.storeTitle).toContain('تم إلغاء الطلب #a1b2c3d4 من قِبل الإدارة');
+    expect(res.storeBody).toContain('يرجى التوقف عن تحضير الطلب');
+  });
+
+  it('formats store progression notifications when driver claims and completes delivery', () => {
+    const onTheWay = formatStoreProgressionNotification({
+      orderId: 'e1f2a3b4-5678-90ab-cdef-1234567890ab',
+      status: 'on_the_way',
+      driverName: 'أحمد',
+    });
+    expect(onTheWay.title).toContain('تم استلام طلبك (#e1f2a3b4) بواسطة الكابتن أحمد');
+    expect(onTheWay.body).toContain('بدأ الكابتن أحمد توصيل الطلب');
+    expect(onTheWay.path).toBe('/provider?tab=orders&order=e1f2a3b4-5678-90ab-cdef-1234567890ab');
+
+    const delivered = formatStoreProgressionNotification({
+      orderId: 'e1f2a3b4-5678-90ab-cdef-1234567890ab',
+      status: 'delivered',
+    });
+    expect(delivered.title).toContain('تم تسليم الطلب (#e1f2a3b4) للعميل بنجاح');
+    expect(delivered.body).toContain('تحصيل المبلغ بنجاح');
+    expect(delivered.path).toBe('/provider?tab=orders&order=e1f2a3b4-5678-90ab-cdef-1234567890ab');
   });
 
   describe('chat notification recipient isolation rules', () => {

@@ -1,7 +1,7 @@
 // Messaging only: no offline app-shell or navigation caching.
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetPath = event.notification.data?.path || event.notification.data?.link || '/orders';
+  const targetPath = event.notification.data?.path || event.notification.data?.link || event.notification.data?.FCM_MSG?.data?.path || '/orders';
   const url = new URL(targetPath, self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async windows => {
     for (const client of windows) {

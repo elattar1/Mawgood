@@ -32,7 +32,13 @@ export async function enablePush(): Promise<PushResult> {
   if (!foregroundListenerStarted) {
     onMessage(messaging, payload => {
       window.dispatchEvent(new CustomEvent('husayniya-push-received'));
-      void registration.showNotification(payload.notification?.title ?? 'خدمات الحسينية', { body: payload.notification?.body ?? '', icon: '/icon-192.png', data: { path: '/orders' } });
+      const targetPath = payload.data?.path || (payload as any).fcmOptions?.link || '/orders';
+      void registration.showNotification(payload.notification?.title ?? 'خدمات الحسينية', {
+        body: payload.notification?.body ?? '',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        data: { path: targetPath },
+      });
     });
     foregroundListenerStarted = true;
   }

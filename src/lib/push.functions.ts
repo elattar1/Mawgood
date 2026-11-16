@@ -87,6 +87,11 @@ export async function sendPushToUser(
                       badge: '/icon-192.png',
                       tag: payload.tag || 'husayniya-chat',
                       renotify: true,
+                      requireInteraction: payload.requireInteraction ?? false,
+                      vibrate: [200, 100, 200],
+                      data: {
+                        path: payload.path || '/orders',
+                      },
                     },
                     fcm_options: {
                       link: payload.path || '/orders',

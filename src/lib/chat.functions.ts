@@ -495,6 +495,9 @@ export async function notifyOrderStatusUpdate(
         if (cancelledBy === "customer") {
           title = `❌ تم إلغاء الطلب #${shortId} من قِبل العميل`;
           message = extra?.note || `قام العميل بإلغاء هذا الطلب.`;
+        } else if (cancelledBy === "admin") {
+          title = `❌ تنبيه: تم إلغاء طلبك من قِبل إدارة المنصة`;
+          message = extra?.note ? `قامت إدارة المنصة بإلغاء طلبك: ${extra.note}` : `قامت إدارة المنصة بإلغاء هذا الطلب.`;
         } else {
           title = `❌ اعتذار: تم إلغاء طلبك من قِبل ${storeName}`;
           message = extra?.note ? `قام ${storeName} بإلغاء هذا الطلب: ${extra.note}` : `نعتذر منك، قام ${storeName} بإلغاء طلبك لعدم إمكانية توفيره حالياً.`;
@@ -590,10 +593,17 @@ export async function notifyOrderStatusUpdate(
         }
       } else {
         // Store or admin cancelled -> Notify CUSTOMER
-        const customerCancelTitle = `❌ اعتذار: تم إلغاء طلبك من قِبل ${storeName}`;
+        const customerCancelTitle =
+          cancelledBy === "admin"
+            ? "❌ تنبيه: تم إلغاء طلبك من قِبل إدارة المنصة"
+            : `❌ اعتذار: تم إلغاء طلبك من قِبل ${storeName}`;
         const customerCancelBody = extra?.note
-          ? `نعتذر منك، قام ${storeName} بإلغاء طلبك رقم #${shortId}: ${extra.note}`
-          : `نعتذر منك، قام ${storeName} بإلغاء طلبك رقم #${shortId} لعدم إمكانية توفيره حالياً.`;
+          ? (cancelledBy === "admin"
+              ? `قامت إدارة المنصة بإلغاء طلبك رقم #${shortId}: ${extra.note}`
+              : `نعتذر منك، قام ${storeName} بإلغاء طلبك رقم #${shortId}: ${extra.note}`)
+          : (cancelledBy === "admin"
+              ? `قامت إدارة المنصة بإلغاء طلبك رقم #${shortId}.`
+              : `نعتذر منك، قام ${storeName} بإلغاء طلبك رقم #${shortId} لعدم إمكانية توفيره حالياً.`);
         const customerLink = `/orders?filter=cancelled&chat=${orderId}`;
 
         try {
@@ -612,10 +622,38 @@ export async function notifyOrderStatusUpdate(
           });
         } catch {}
 
+        // If cancelled by admin, ALSO notify store owner to stop preparing
+        if (cancelledBy === "admin" && storeOwnerId) {
+          try {
+            const adminCancelTitle = `❌ تم إلغاء الطلب #${shortId} من قِبل الإدارة`;
+            const adminCancelBody = extra?.note
+              ? `قامت إدارة المنصة بإلغاء الطلب رقم #${shortId}: ${extra.note}. يرجى التوقف عن تحضير الطلب.`
+              : `قامت إدارة المنصة بإلغاء الطلب رقم #${shortId}. يرجى التوقف عن تحضير الطلب.`;
+            const storePath = `/provider?tab=orders`;
+
+            await supabaseAdmin.from("notifications").insert({
+              user_id: storeOwnerId,
+              title: adminCancelTitle,
+              body: adminCancelBody,
+              link: storePath,
+            });
+            await sendPushToUser(storeOwnerId, {
+              title: adminCancelTitle,
+              body: adminCancelBody,
+              path: storePath,
+              tag: `husayniya-order-cancel-admin-${orderId}`,
+              requireInteraction: true,
+            });
+          } catch {}
+        }
+
         if (order.driver_id) {
           try {
             const drTitle = `❌ تم إلغاء الطلب #${shortId}`;
-            const drBody = `قام ${storeName} بإلغاء الطلب رقم #${shortId}. تم إلغاء مهمة التوصيل.`;
+            const drBody =
+              cancelledBy === "admin"
+                ? `قامت إدارة المنصة بإلغاء الطلب رقم #${shortId}. تم إلغاء مهمة التوصيل.`
+                : `قام ${storeName} بإلغاء الطلب رقم #${shortId}. تم إلغاء مهمة التوصيل.`;
             const drLink = `/delivery?tab=available`;
             await supabaseAdmin.from("notifications").insert({
               user_id: order.driver_id,
@@ -654,6 +692,51 @@ export async function notifyOrderStatusUpdate(
           requireInteraction: true,
         });
       } catch {}
+
+      // If order is picked up / with driver, also notify the STORE OWNER
+      if (newStatus === "on_the_way" && storeOwnerId) {
+        try {
+          const drLabel = extra?.driverName ? `الكابتن ${extra.driverName}` : "كابتن التوصيل";
+          const stTitle = `🛵 تم استلام طلبك (#${shortId}) بواسطة ${drLabel}`;
+          const stBody = `بدأ ${drLabel} توصيل الطلب رقم #${shortId} وهو الآن في الطريق للعميل.`;
+          const stPath = `/provider?tab=orders&order=${orderId}`;
+
+          await supabaseAdmin.from("notifications").insert({
+            user_id: storeOwnerId,
+            title: stTitle,
+            body: stBody,
+            link: stPath,
+          });
+          await sendPushToUser(storeOwnerId, {
+            title: stTitle,
+            body: stBody,
+            path: stPath,
+            tag: `husayniya-order-dr-pickup-${orderId}`,
+          });
+        } catch {}
+      }
+
+      // If order is delivered, also notify the STORE OWNER
+      if (newStatus === "delivered" && storeOwnerId) {
+        try {
+          const stTitle = `🎉 تم تسليم الطلب (#${shortId}) للعميل بنجاح`;
+          const stBody = `قام كابتن التوصيل بتسليم الطلب (#${shortId}) للعميل وتحصيل المبلغ بنجاح.`;
+          const stPath = `/provider?tab=orders&order=${orderId}`;
+
+          await supabaseAdmin.from("notifications").insert({
+            user_id: storeOwnerId,
+            title: stTitle,
+            body: stBody,
+            link: stPath,
+          });
+          await sendPushToUser(storeOwnerId, {
+            title: stTitle,
+            body: stBody,
+            path: stPath,
+            tag: `husayniya-order-delivered-${orderId}`,
+          });
+        } catch {}
+      }
 
       // If preparing and needs a driver, notify active drivers
       if (newStatus === "preparing" && !order.driver_id) {
