@@ -153,14 +153,16 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
         }
       }
 
-      // Customer in-app and push order confirmation
-      await sendNotificationWithPush({
-        userId: context.userId,
-        title: `🛍️ تم تأكيد إرسال طلبك إلى ${storeName}`,
-        body: `طلبك رقم #${shortId} قيد المراجعة لدى المتجر. سنوافيك بإشعار فور بدء التحضير.`,
-        path: `/orders?filter=active&chat=${orderId}`,
-        tag: `husayniya-order-cust-${orderId}`,
-      });
+      // Customer in-app and push order confirmation (فقط للعميل وليس لصاحب المتجر إذا كان يختبر من حسابه)
+      if (context.userId !== storeOwnerId) {
+        await sendNotificationWithPush({
+          userId: context.userId,
+          title: `🛍️ تم تأكيد إرسال طلبك إلى ${storeName}`,
+          body: `طلبك رقم #${shortId} قيد المراجعة لدى المتجر. سنوافيك بإشعار فور بدء التحضير.`,
+          path: `/orders?filter=active&chat=${orderId}`,
+          tag: `husayniya-order-cust-${orderId}`,
+        });
+      }
     } catch (notifErr) {
       console.error('Failed to dispatch order notification/push:', notifErr);
     }
@@ -262,7 +264,7 @@ export const cancelCustomerRequest = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .inputValidator(z.object({ kind: z.enum(requestKinds), id: z.string().uuid() }))
   .handler(async ({ data, context }) => {
-    const row = await context.supabase.from(data.kind).select('status').eq('id', data.id).eq('customer_id', context.userId).single();
+    const row = await context.supabase.from(data.kind).select('store_id,status').eq('id', data.id).eq('customer_id', context.userId).single();
     if (!row.data || !canCustomerCancel(data.kind, row.data.status)) throw new Error('لا يمكن إلغاء الطلب في حالته الحالية');
     const result = await context.supabase.from(data.kind).update({ status: 'cancelled' }).eq('id', data.id).eq('customer_id', context.userId).eq('status', row.data.status).select('id').single();
     if (result.error) throw new Error('تعذر الإلغاء؛ حدّث الطلب وحاول مرة أخرى');
@@ -270,9 +272,43 @@ export const cancelCustomerRequest = createServerFn({ method: 'POST' })
     if (data.kind === "orders") {
       try {
         const { notifyOrderStatusUpdate } = await import("@/lib/chat.functions");
-        await notifyOrderStatusUpdate(data.id, "cancelled");
+        await notifyOrderStatusUpdate(data.id, "cancelled", { cancelledBy: "customer" });
       } catch (e) {
         console.error("cancel notification error:", e);
+      }
+    } else if (data.kind === "bookings") {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { sendNotificationWithPush } = await import("@/lib/push.functions");
+        const store = await supabaseAdmin.from("stores").select("name, owner_id").eq("id", row.data.store_id).maybeSingle();
+        if (store.data?.owner_id) {
+          await sendNotificationWithPush({
+            userId: store.data.owner_id,
+            title: `❌ إلغاء حجز موعد من قِبل المريض (${store.data.name})`,
+            body: `قام المريض بإلغاء موعد الحجز في العيادة.`,
+            path: "/provider?tab=bookings",
+            tag: `husayniya-booking-cancel-${data.id}`,
+          });
+        }
+      } catch (e) {
+        console.error("Booking cancel notification error:", e);
+      }
+    } else if (data.kind === "service_requests") {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { sendNotificationWithPush } = await import("@/lib/push.functions");
+        const store = await supabaseAdmin.from("stores").select("name, owner_id").eq("id", row.data.store_id).maybeSingle();
+        if (store.data?.owner_id) {
+          await sendNotificationWithPush({
+            userId: store.data.owner_id,
+            title: `❌ إلغاء طلب خدمة من قِبل العميل (${store.data.name})`,
+            body: `قام العميل بإلغاء طلب الخدمة المنزلية.`,
+            path: "/provider?tab=services",
+            tag: `husayniya-service-cancel-${data.id}`,
+          });
+        }
+      } catch (e) {
+        console.error("Service cancel notification error:", e);
       }
     }
 

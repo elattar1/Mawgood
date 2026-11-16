@@ -111,28 +111,13 @@ export function OrderTimelineProgressBar({
   const rawIndex = steps.indexOf(status);
   const activeIndex = rawIndex >= 0 ? rawIndex : 0;
   const percent = steps.length > 1 ? (activeIndex / (steps.length - 1)) * 100 : 0;
-  const isComplete = status === 'delivered' || status === 'completed';
 
   return (
-    <div className={`my-5 rounded-xl border bg-muted/20 p-3 sm:p-4 transition-all duration-300 ${className}`} dir="rtl">
-      {/* Live Status Pill & Stage Counter */}
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="flex items-center gap-1.5 font-bold text-primary">
-          {status === 'on_the_way' && <Bike className="size-4 animate-bounce text-emerald-600 dark:text-emerald-400" />}
-          {status === 'preparing' && <Store className="size-4 animate-pulse text-amber-600 dark:text-amber-400" />}
-          {status === 'pending' && <Clock className="size-4 animate-pulse text-primary" />}
-          {isComplete && <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />}
-          <span className="leading-snug">{getStatusHeadline(kind, status)}</span>
-        </span>
-        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-          المرحلة {activeIndex + 1} من {steps.length} ({Math.round(percent)}%)
-        </span>
-      </div>
-
+    <div className={`my-4 rounded-xl border bg-muted/20 p-3 sm:p-4 transition-all duration-300 ${className}`} dir="rtl">
       {/* Interactive Progress Bar */}
-      <div className="relative py-2">
-        {/* Background & Animated Active Progress Track */}
-        <div className="absolute top-4 sm:top-5 right-4 sm:right-5 left-4 sm:left-5 h-1.5 -translate-y-1/2 rounded-full bg-muted overflow-hidden">
+      <div className="relative">
+        {/* Background & Animated Active Progress Track — Centered vertically at exact center of circle nodes */}
+        <div className="absolute top-4 sm:top-5 right-4 sm:right-5 left-4 sm:left-5 h-1 -translate-y-1/2 rounded-full bg-muted/80 overflow-hidden">
           <div
             className="absolute top-0 bottom-0 right-0 rounded-full bg-gradient-to-l from-primary via-primary/90 to-emerald-500 shadow-sm transition-all duration-700 ease-out"
             style={{ width: `${percent}%` }}
@@ -151,7 +136,7 @@ export function OrderTimelineProgressBar({
                 <div
                   className={`relative z-10 flex size-8 sm:size-10 items-center justify-center rounded-full transition-all duration-500 ${
                     isCurrent
-                      ? 'bg-primary text-primary-foreground shadow-md ring-4 ring-primary/25 scale-110'
+                      ? 'bg-primary text-primary-foreground shadow-md ring-4 ring-primary/25 scale-105'
                       : isPassed
                       ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'bg-card border-2 border-muted text-muted-foreground/60'

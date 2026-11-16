@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { pushTokenInput, isStalePushToken, formatOrderPushPayload } from '../lib/push-rules';
+import {
+  pushTokenInput,
+  isStalePushToken,
+  formatOrderPushPayload,
+  formatCancellationNotification,
+  determineChatNotificationRecipient,
+} from '../lib/push-rules';
 
 describe('push delivery rules', () => {
   it('rejects a missing device token', () => { expect(pushTokenInput.safeParse({ token: '' }).success).toBe(false); });
@@ -45,5 +51,93 @@ describe('push delivery rules', () => {
     expect(payload.body).toContain('2 أصناف');
     expect(payload.path).toBe('/provider?tab=orders&order=11223344-5566-7788-99aa-bbccddeeff00');
     expect(payload.requireInteraction).toBe(true);
+  });
+
+  it('formats customer cancellation targeting store owner with clear attribution', () => {
+    const res = formatCancellationNotification({
+      orderId: 'c1d2e3f4-1234-5678-90ab-cdef12345678',
+      storeName: 'الآن ماركت',
+      cancelledBy: 'customer',
+    });
+
+    expect(res.target).toBe('store');
+    expect(res.title).toContain('تم إلغاء الطلب #c1d2e3f4 من قِبل العميل');
+    expect(res.body).toContain('قام العميل بإلغاء طلبه رقم #c1d2e3f4 من الآن ماركت');
+    expect(res.path).toBe('/provider?tab=orders');
+    expect(res.chatMessage).toBe('قام العميل بإلغاء هذا الطلب.');
+  });
+
+  it('formats store cancellation targeting customer with store apology and optional note', () => {
+    const res = formatCancellationNotification({
+      orderId: 'c1d2e3f4-1234-5678-90ab-cdef12345678',
+      storeName: 'الآن ماركت',
+      cancelledBy: 'store',
+      note: 'الأصناف المطلوبة نفذت من المخزن',
+    });
+
+    expect(res.target).toBe('customer');
+    expect(res.title).toContain('تم إلغاء طلبك من قِبل الآن ماركت');
+    expect(res.body).toContain('الأصناف المطلوبة نفذت من المخزن');
+    expect(res.path).toContain('/orders?filter=cancelled');
+    expect(res.chatMessage).toContain('الأصناف المطلوبة نفذت من المخزن');
+  });
+
+  describe('chat notification recipient isolation rules', () => {
+    const storeOwnerId = 'store-owner-uuid';
+    const customerId = 'customer-uuid';
+    const driverId = 'driver-uuid';
+
+    it('routes customer messages to store when no driver is assigned', () => {
+      const result = determineChatNotificationRecipient({
+        senderRole: 'customer',
+        order: {
+          customer_id: customerId,
+          driver_id: null,
+          status: 'preparing',
+          picked_up_at: null,
+        },
+        storeOwnerId,
+      });
+
+      expect(result.isDriverStage).toBe(false);
+      expect(result.targetRole).toBe('store');
+      expect(result.recipientId).toBe(storeOwnerId);
+    });
+
+    it('isolates store: routes customer messages ONLY to driver once driver is assigned', () => {
+      const result = determineChatNotificationRecipient({
+        senderRole: 'customer',
+        order: {
+          customer_id: customerId,
+          driver_id: driverId,
+          status: 'preparing', // still preparing, but driver already claimed
+          picked_up_at: null,
+        },
+        storeOwnerId,
+      });
+
+      expect(result.isDriverStage).toBe(true);
+      expect(result.targetRole).toBe('driver');
+      expect(result.recipientId).toBe(driverId);
+      expect(result.recipientId).not.toBe(storeOwnerId);
+    });
+
+    it('isolates store: routes driver messages ONLY to customer, never to store', () => {
+      const result = determineChatNotificationRecipient({
+        senderRole: 'driver',
+        order: {
+          customer_id: customerId,
+          driver_id: driverId,
+          status: 'on_the_way',
+          picked_up_at: new Date().toISOString(),
+        },
+        storeOwnerId,
+      });
+
+      expect(result.isDriverStage).toBe(true);
+      expect(result.targetRole).toBe('customer');
+      expect(result.recipientId).toBe(customerId);
+      expect(result.recipientId).not.toBe(storeOwnerId);
+    });
   });
 });

@@ -12,7 +12,6 @@ import {
   Trash2,
   Save,
   Check,
-  X,
   RefreshCw,
   ShieldCheck,
   Search,
@@ -2197,84 +2196,6 @@ export function Dashboard({
               ))}
               {currentDetail.images.length > 0 && <p className="text-sm text-muted-foreground">صور مرفقة: {currentDetail.images.length}</p>}
               <p className="text-lg font-semibold">الإجمالي: {money(currentDetail.amount)}</p>
-              {currentDetail.kind === "orders" && currentDetail.status === "pending" && (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">إجراء فوري لصاحب المتجر:</p>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <Button
-                      type="button"
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 text-sm shadow-sm gap-2"
-                      disabled={busy}
-                      onClick={() => {
-                        execute(
-                          () =>
-                            doUpdate({
-                              data: {
-                                id: currentDetail.id,
-                                kind: currentDetail.kind,
-                                status: "accepted",
-                              },
-                            }),
-                          () => {},
-                        );
-                      }}
-                    >
-                      <Check className="size-4" />
-                      قبول وتأكيد الطلب
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className="font-bold h-11 text-sm shadow-sm gap-2"
-                      disabled={busy}
-                      onClick={() => {
-                        if (window.confirm("هل أنت متأكد من رفض هذا الطلب وإلغائه؟")) {
-                          execute(
-                            () =>
-                              doUpdate({
-                                data: {
-                                  id: currentDetail.id,
-                                  kind: currentDetail.kind,
-                                  status: "cancelled",
-                                },
-                              }),
-                            () => {},
-                          );
-                        }
-                      }}
-                    >
-                      <X className="size-4" />
-                      رفض الطلب
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {currentDetail.kind === "orders" && currentDetail.status === "accepted" && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">تم قبول الطلب، الخطوة التالية:</p>
-                  <Button
-                    type="button"
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold h-11 text-sm shadow-sm gap-2"
-                    disabled={busy}
-                    onClick={() => {
-                      execute(
-                        () =>
-                          doUpdate({
-                            data: {
-                              id: currentDetail.id,
-                              kind: currentDetail.kind,
-                              status: "preparing",
-                            },
-                          }),
-                        () => {},
-                      );
-                    }}
-                  >
-                    <Package className="size-4" />
-                    بدء تحضير الطلب (إشعار كباتن التوصيل)
-                  </Button>
-                </div>
-              )}
               {currentDetail.kind === "orders" && currentDetail.status === "preparing" && (
                 <p className="rounded-md bg-primary/5 p-3 text-sm">الطلب جاهز وبانتظار استلام الدليفري</p>
               )}

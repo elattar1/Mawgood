@@ -689,7 +689,9 @@ export const updateRequest = createServerFn({ method: "POST" })
     if (data.kind === "orders") {
       try {
         const { notifyOrderStatusUpdate } = await import("@/lib/chat.functions");
-        await notifyOrderStatusUpdate(data.id, data.status);
+        await notifyOrderStatusUpdate(data.id, data.status, {
+          cancelledBy: data.status === "cancelled" ? (admin.data ? "admin" : "store") : undefined,
+        });
       } catch (e) {
         console.error("notifyOrderStatusUpdate failed:", e);
       }
@@ -697,11 +699,16 @@ export const updateRequest = createServerFn({ method: "POST" })
       try {
         const { sendNotificationWithPush } = await import("@/lib/push.functions");
         const statusText = STATUS_LABELS[data.status] || data.status;
+        const isCancelled = data.status === "cancelled";
         await sendNotificationWithPush({
           userId: (existing.data as any).customer_id,
-          title: `🩺 تحديث حالة موعد الكشف: ${statusText}`,
-          body: `تم تحديث حالة موعدك في العيادة إلى "${statusText}".`,
-          path: "/orders?filter=active",
+          title: isCancelled
+            ? `❌ اعتذار: تم إلغاء موعد الكشف من قِبل العيادة`
+            : `🩺 تحديث حالة موعد الكشف: ${statusText}`,
+          body: isCancelled
+            ? `نعتذر منك، قامت العيادة بإلغاء موعد الكشف الخاص بك لتعذر الاستقبال في هذا الموعد.`
+            : `تم تحديث حالة موعدك في العيادة إلى "${statusText}".`,
+          path: isCancelled ? "/orders?filter=cancelled" : "/orders?filter=active",
           tag: `husayniya-booking-${data.id}`,
         });
       } catch (e) {
@@ -711,11 +718,16 @@ export const updateRequest = createServerFn({ method: "POST" })
       try {
         const { sendNotificationWithPush } = await import("@/lib/push.functions");
         const statusText = STATUS_LABELS[data.status] || data.status;
+        const isCancelled = data.status === "cancelled";
         await sendNotificationWithPush({
           userId: (existing.data as any).customer_id,
-          title: `🔧 تحديث طلب الصيانة: ${statusText}`,
-          body: `تم تحديث حالة طلب الخدمة إلى "${statusText}"${data.quoted_price ? ` بقيمة ${data.quoted_price} ج.م` : ""}.`,
-          path: "/orders?filter=active",
+          title: isCancelled
+            ? `❌ اعتذار: تم إلغاء طلب الخدمة من قِبل مقدم الخدمة`
+            : `🔧 تحديث طلب الصيانة: ${statusText}`,
+          body: isCancelled
+            ? `نعتذر منك، قام مقدم الخدمة بإلغاء طلب الخدمة لتعذر التنفيذ حالياً.`
+            : `تم تحديث حالة طلب الخدمة إلى "${statusText}"${data.quoted_price ? ` بقيمة ${data.quoted_price} ج.م` : ""}.`,
+          path: isCancelled ? "/orders?filter=cancelled" : "/orders?filter=active",
           tag: `husayniya-service-${data.id}`,
         });
       } catch (e) {

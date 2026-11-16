@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth";
@@ -8,7 +8,7 @@ import { getNotifications, readNotification } from "@/lib/customer.functions";
 import { registerPushDevice } from "@/lib/push.functions";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { Button } from "@/components/ui/button";
-import { playCustomerOrderAlert, getCustomerSoundEnabled } from "@/lib/order-alert";
+import { playCustomerOrderAlert, getCustomerSoundEnabled, playNewOrderAlert } from "@/lib/order-alert";
 import { supabase } from "@/integrations/supabase/client";
 
 function playMessageChime() {
@@ -42,6 +42,16 @@ function playMessageChime() {
   } catch {}
 }
 
+interface NotificationBannerItem {
+  id: string;
+  orderId: string;
+  title: string;
+  body: string;
+  isOrderStatus?: boolean;
+  detectedStatus?: string;
+  link?: string;
+}
+
 export function InAppChatNotifier() {
   const { user } = useAuth();
   const getNotifs = useServerFn(getNotifications);
@@ -50,25 +60,33 @@ export function InAppChatNotifier() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [activeBanner, setActiveBanner] = useState<{
-    id: string;
-    orderId: string;
-    title: string;
-    body: string;
-    isOrderStatus?: boolean;
-    detectedStatus?: string;
-    link?: string;
-  } | null>(null);
-
+  const [activeBanners, setActiveBanners] = useState<NotificationBannerItem[]>([]);
   const [openChatOrderId, setOpenChatOrderId] = useState<string | null>(null);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const dismissTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Touch gesture states for swipe down to open, swipe up to dismiss
-  const touchStartY = useRef<number | null>(null);
-  const [touchDeltaY, setTouchDeltaY] = useState(0);
+  // Cleanup auto-dismiss timers on unmount
+  useEffect(() => {
+    return () => {
+      dismissTimersRef.current.forEach((t) => clearTimeout(t));
+      dismissTimersRef.current.clear();
+    };
+  }, []);
+
+  // Remove a banner by id with optional mark-as-read
+  const removeBanner = (id: string, shouldMarkRead: boolean = false) => {
+    const timer = dismissTimersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      dismissTimersRef.current.delete(id);
+    }
+    setActiveBanners((prev) => prev.filter((b) => b.id !== id));
+    if (shouldMarkRead) {
+      markAsReadMutation.mutate(id);
+    }
+  };
 
   // Auto-register push if permission is granted, or prompt if default
   useEffect(() => {
@@ -169,8 +187,8 @@ export function InAppChatNotifier() {
   useEffect(() => {
     if (!notifications || !Array.isArray(notifications) || !user) return;
 
-    // Find the latest unread chat or order status notification
-    const unread = notifications.find(
+    // Filter all new unread chat or order notifications
+    const unreadList = notifications.filter(
       (n: any) =>
         !n.is_read &&
         (n.title.includes("رسالة") ||
@@ -181,7 +199,13 @@ export function InAppChatNotifier() {
         !seenNotificationIdsRef.current.has(n.id)
     );
 
-    if (unread) {
+    if (unreadList.length === 0) return;
+
+    const activeWindowChatId = typeof window !== "undefined" ? (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID : null;
+    const newBanners: NotificationBannerItem[] = [];
+    let playedSound = false;
+
+    for (const unread of unreadList) {
       seenNotificationIdsRef.current.add(unread.id);
 
       // Extract orderId from link if present
@@ -192,16 +216,13 @@ export function InAppChatNotifier() {
         extractedOrderId = unread.link.split("order=")[1].split("&")[0];
       }
 
-      // Requirement: When chat dialog is currently open for that order,
-      // suffice with displaying the message in the chat feed and DO NOT show the top banner!
-      const activeWindowChatId = typeof window !== "undefined" ? (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID : null;
+      // If chat dialog is already open for this order, silently mark read and skip top banner
       if (
         (activeWindowChatId && activeWindowChatId === extractedOrderId) ||
         (openChatOrderId && openChatOrderId === extractedOrderId)
       ) {
-        // Silently mark as read without top banner interruption
         markAsReadMutation.mutate(unread.id);
-        return;
+        continue;
       }
 
       const isOrderStatus =
@@ -226,8 +247,25 @@ export function InAppChatNotifier() {
         detectedStatus = "cancelled";
       }
 
-      // Show banner and play sound
-      setActiveBanner({
+      const isStoreNewOrder = unread.title.includes("طلب جديد") || unread.link?.includes("/provider");
+
+      if (!playedSound) {
+        if (isStoreNewOrder) {
+          qc.invalidateQueries({ queryKey: ['dashboard'] });
+          playNewOrderAlert(true);
+          playedSound = true;
+        } else if (isOrderStatus) {
+          qc.invalidateQueries({ queryKey: ['customer-orders'] });
+          const soundEnabled = getCustomerSoundEnabled();
+          playCustomerOrderAlert(detectedStatus, soundEnabled);
+          playedSound = true;
+        } else {
+          playMessageChime();
+          playedSound = true;
+        }
+      }
+
+      const bannerItem: NotificationBannerItem = {
         id: unread.id,
         orderId: extractedOrderId,
         title: unread.title,
@@ -235,84 +273,49 @@ export function InAppChatNotifier() {
         isOrderStatus,
         detectedStatus,
         link: unread.link,
+      };
+
+      newBanners.push(bannerItem);
+
+      // Auto-dismiss each banner after exactly 3 seconds
+      const timer = setTimeout(() => {
+        removeBanner(unread.id, false);
+      }, 3000);
+      dismissTimersRef.current.set(unread.id, timer);
+    }
+
+    if (newBanners.length > 0) {
+      setActiveBanners((prev) => {
+        // Stack new banners beneath existing ones, limiting to 4 visible stacked banners
+        const combined = [...prev, ...newBanners];
+        return combined.slice(-4);
       });
-
-      if (isOrderStatus) {
-        qc.invalidateQueries({ queryKey: ['customer-orders'] });
-        const soundEnabled = getCustomerSoundEnabled();
-        playCustomerOrderAlert(detectedStatus, soundEnabled);
-      } else {
-        playMessageChime();
-      }
-
-      // Auto dismiss after 6 seconds
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        setActiveBanner(null);
-      }, 6000);
     }
   }, [notifications, user, openChatOrderId]);
 
-  function handleBannerClick() {
-    if (!activeBanner) return;
-    const targetOrderId = activeBanner.orderId;
-    const notifId = activeBanner.id;
-    const notifLink = activeBanner.link;
-    const isStatus = activeBanner.isOrderStatus;
+  function handleBannerClick(banner: NotificationBannerItem) {
+    removeBanner(banner.id, true);
 
-    setActiveBanner(null);
-    setTouchDeltaY(0);
-    markAsReadMutation.mutate(notifId);
-
-    if (targetOrderId && (!isStatus || notifLink?.includes("chat="))) {
-      setOpenChatOrderId(targetOrderId);
-    } else if (notifLink) {
-      navigate({ to: notifLink });
+    if (banner.link && banner.link.includes("/provider")) {
+      navigate({ to: banner.link });
+    } else if (banner.orderId && (!banner.isOrderStatus || banner.link?.includes("chat="))) {
+      setOpenChatOrderId(banner.orderId);
+    } else if (banner.link) {
+      navigate({ to: banner.link });
     } else {
       navigate({ to: "/orders" });
     }
   }
 
-  function handleDismiss(e?: React.MouseEvent) {
-    if (e) e.stopPropagation();
-    if (activeBanner) {
-      markAsReadMutation.mutate(activeBanner.id);
-    }
-    setActiveBanner(null);
-    setTouchDeltaY(0);
-  }
-
-  // Swipe gesture handlers
-  function handleTouchStart(e: React.TouchEvent) {
-    touchStartY.current = e.touches[0].clientY;
-  }
-
-  function handleTouchMove(e: React.TouchEvent) {
-    if (touchStartY.current === null) return;
-    const delta = e.touches[0].clientY - touchStartY.current;
-    // Bound drag for responsive feel
-    if (delta > -90 && delta < 90) {
-      setTouchDeltaY(delta);
-    }
-  }
-
-  function handleTouchEnd() {
-    if (touchStartY.current === null) return;
-    if (touchDeltaY > 25) {
-      // Swiped DOWN -> Open Chat!
-      handleBannerClick();
-    } else if (touchDeltaY < -20) {
-      // Swiped UP -> Dismiss Banner!
-      handleDismiss();
-    }
-    touchStartY.current = null;
-    setTouchDeltaY(0);
+  function handleDismiss(e: React.MouseEvent, bannerId: string) {
+    e.stopPropagation();
+    removeBanner(bannerId, true);
   }
 
   return (
     <>
       {/* Push Notification Enable Banner */}
-      {showPushPrompt && !activeBanner && (
+      {showPushPrompt && activeBanners.length === 0 && (
         <div
           role="alert"
           className="fixed top-3 left-1/2 -translate-x-1/2 z-[9998] w-[94%] max-w-md animate-in fade-in slide-in-from-top-4"
@@ -352,67 +355,69 @@ export function InAppChatNotifier() {
         </div>
       )}
 
-      {/* Top Banner Alert with Swipe Gestures: Swipe down to open, swipe up to dismiss */}
-      {activeBanner && (
+      {/* Stacked In-App Notification Banners: Auto-dismiss after 3s and stack beneath each other */}
+      {activeBanners.length > 0 && (
         <div
-          role="alert"
-          onClick={handleBannerClick}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          style={{
-            transform: `translate(-50%, ${touchDeltaY}px)`,
-            transition: touchStartY.current !== null ? "none" : "transform 0.25s ease-out",
-          }}
-          className="fixed top-3 left-1/2 z-[9999] w-[94%] max-w-md cursor-pointer select-none transition-all duration-200 animate-in fade-in slide-in-from-top-4"
+          role="region"
+          aria-label="تنبيهات الموقع المباشرة"
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[9999] w-[94%] max-w-md flex flex-col gap-2.5 pointer-events-none"
         >
-          <div className="relative overflow-hidden rounded-2xl border-2 border-primary/40 bg-card/95 backdrop-blur-md p-3.5 shadow-2xl hover:border-primary transition-colors">
-            {/* 6-second countdown progress bar */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20">
-              <div className="h-full bg-primary animate-[shrink_6s_linear_forwards]" />
-            </div>
-
-            <div className="flex items-start justify-between gap-3 pt-1">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs">
-                  {activeBanner.detectedStatus === "delivered" ? (
-                    <CheckCircle2 className="size-5 text-emerald-600" />
-                  ) : activeBanner.title.includes("الكابتن") || activeBanner.title.includes("التوصيل") || activeBanner.detectedStatus === "on_the_way" ? (
-                    <Bike className="size-5 text-emerald-600 animate-bounce" />
-                  ) : activeBanner.title.includes("المتجر") || activeBanner.detectedStatus === "preparing" || activeBanner.detectedStatus === "accepted" ? (
-                    <Store className="size-5 text-primary" />
-                  ) : (
-                    <MessageSquare className="size-5 text-primary" />
-                  )}
+          {activeBanners.map((banner) => (
+            <div
+              key={banner.id}
+              role="alert"
+              onClick={() => handleBannerClick(banner)}
+              className="pointer-events-auto cursor-pointer select-none transition-all duration-300 animate-in fade-in slide-in-from-top-3"
+            >
+              <div className="relative overflow-hidden rounded-2xl border-2 border-primary/40 bg-card/95 backdrop-blur-md p-3.5 shadow-2xl hover:border-primary transition-colors">
+                {/* 3-second countdown progress bar */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20">
+                  <div className="h-full bg-primary animate-[shrink_3s_linear_forwards]" />
                 </div>
 
-                <div className="min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-foreground truncate">
-                      {activeBanner.title}
-                    </span>
-                    <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <div className="flex items-start justify-between gap-3 pt-1">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs">
+                      {banner.detectedStatus === "delivered" ? (
+                        <CheckCircle2 className="size-5 text-emerald-600" />
+                      ) : banner.title.includes("الكابتن") || banner.title.includes("التوصيل") || banner.detectedStatus === "on_the_way" ? (
+                        <Bike className="size-5 text-emerald-600 animate-bounce" />
+                      ) : banner.title.includes("المتجر") || banner.detectedStatus === "preparing" || banner.detectedStatus === "accepted" ? (
+                        <Store className="size-5 text-primary" />
+                      ) : (
+                        <MessageSquare className="size-5 text-primary" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-foreground truncate">
+                          {banner.title}
+                        </span>
+                        <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                        {banner.body}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                    {activeBanner.body}
-                  </p>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleDismiss(e, banner.id)}
+                    className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
+                    title="إغلاق"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={handleDismiss}
-                className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
-                title="إغلاق"
-              >
-                <X className="size-4" />
-              </button>
             </div>
-          </div>
+          ))}
         </div>
       )}
 
-      {/* Global Order Chat Dialog when banner is clicked or swiped down */}
+      {/* Global Order Chat Dialog when banner is clicked */}
       <OrderChatDialog
         orderId={openChatOrderId}
         open={!!openChatOrderId}

@@ -103,9 +103,9 @@ export const getOrderChat = createServerFn({ method: "POST" })
     }
 
     // Determine current chat stage:
-    // If order is with driver (status: "on_the_way" or "delivered" or picked up) -> "driver"
-    // Otherwise (placed, confirmed, preparing) -> "store"
-    const isDriverStage = order.status === "on_the_way" || order.status === "delivered" || !!order.picked_up_at;
+    // If order is with driver (status: "on_the_way" or "delivered" or picked up or driver assigned) -> "driver"
+    // Otherwise (placed, confirmed, preparing without driver) -> "store"
+    const isDriverStage = Boolean(order.driver_id || order.status === "on_the_way" || order.status === "delivered" || order.picked_up_at);
     const chatStage: "store" | "driver" = isDriverStage ? "driver" : "store";
 
     const myRole: "customer" | "store" | "driver" | "admin" = isDriver
@@ -232,7 +232,10 @@ export const getOrderChat = createServerFn({ method: "POST" })
       );
     } else if (myRole === "store") {
       visibleMessages = rawMessages.filter(
-        (m) => m.stage === "store" || m.sender_role === "store" || (!m.stage && m.sender_role !== "driver")
+        (m) =>
+          (m.stage === "store" || m.sender_role === "store" || (!m.stage && m.sender_role !== "driver")) &&
+          m.stage !== "driver" &&
+          m.sender_role !== "driver"
       );
     } else {
       visibleMessages = rawMessages;
@@ -304,7 +307,7 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
       throw new Error("تم إغلاق المحادثة تلقائياً لاكتمال تسليم الطلب");
     }
 
-    const isDriverStage = order.status === "on_the_way" || order.status === "delivered" || !!order.picked_up_at;
+    const isDriverStage = Boolean(order.driver_id || order.status === "on_the_way" || order.status === "delivered" || order.picked_up_at);
     const chatStage: "store" | "driver" = isDriverStage ? "driver" : "store";
 
     const senderRole: "customer" | "store" | "driver" | "admin" = isDriver
@@ -447,7 +450,7 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
 export async function notifyOrderStatusUpdate(
   orderId: string,
   newStatus: string,
-  extra?: { driverName?: string; note?: string }
+  extra?: { driverName?: string; note?: string; cancelledBy?: "customer" | "store" | "admin" }
 ): Promise<void> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -463,12 +466,15 @@ export async function notifyOrderStatusUpdate(
     const order = orderRes.data;
     const storeName = (order.stores as any)?.name ?? "المتجر";
     const storeOwnerId = (order.stores as any)?.owner_id;
+    const shortId = orderId.slice(0, 8);
+    const cancelledBy = extra?.cancelledBy ?? "store";
 
     let title = "تحديث في طلبك";
     let message = "";
 
     switch (newStatus) {
       case "confirmed":
+      case "accepted":
         title = `✅ تم قبول وتأكيد طلبك من ${storeName}`;
         message = `قام ${storeName} بتأكيد وقبول طلبك، وبدأ الاستعداد لتجهيزه.`;
         break;
@@ -486,8 +492,13 @@ export async function notifyOrderStatusUpdate(
         message = `تم تسليم الطلب وتحصيله بنجاح. شكراً لطلبك من ${storeName} عبر خدمات الحسينية! نرجو منك تقييم تجربتك ⭐`;
         break;
       case "cancelled":
-        title = `❌ تم إلغاء الطلب من ${storeName}`;
-        message = extra?.note || `تم إلغاء الطلب من قِبل ${storeName}.`;
+        if (cancelledBy === "customer") {
+          title = `❌ تم إلغاء الطلب #${shortId} من قِبل العميل`;
+          message = extra?.note || `قام العميل بإلغاء هذا الطلب.`;
+        } else {
+          title = `❌ اعتذار: تم إلغاء طلبك من قِبل ${storeName}`;
+          message = extra?.note ? `قام ${storeName} بإلغاء هذا الطلب: ${extra.note}` : `نعتذر منك، قام ${storeName} بإلغاء طلبك لعدم إمكانية توفيره حالياً.`;
+        }
         break;
       default:
         title = `تحديث الطلب: ${newStatus}`;
@@ -501,8 +512,8 @@ export async function notifyOrderStatusUpdate(
       id: crypto.randomUUID(),
       order_id: orderId,
       sender_id: "system",
-      sender_role: "admin",
-      sender_name: "خدمات الحسينية (تحديث تلقائي)",
+      sender_role: cancelledBy === "customer" && newStatus === "cancelled" ? "customer" : "admin",
+      sender_name: cancelledBy === "customer" && newStatus === "cancelled" ? "العميل" : "خدمات الحسينية (تحديث تلقائي)",
       message,
       created_at: new Date().toISOString(),
       stage,
@@ -530,79 +541,150 @@ export async function notifyOrderStatusUpdate(
       await supabaseAdmin.from("orders").update({ notes: serialized }).eq("id", orderId);
     } catch {}
 
-    // 3. Notification for on-screen top banner
-    const link = `/orders?filter=active&chat=${orderId}`;
-    try {
-      await supabaseAdmin.from("notifications").insert({
-        user_id: order.customer_id,
-        title,
-        body: message,
-        link,
-      });
-    } catch {}
+    // 3. Routing notifications & push:
+    if (newStatus === "cancelled") {
+      if (cancelledBy === "customer") {
+        // Customer cancelled -> Notify STORE OWNER
+        if (storeOwnerId) {
+          const cancelTitle = `❌ تم إلغاء الطلب #${shortId} من قِبل العميل`;
+          const cancelBody = `قام العميل بإلغاء طلبه رقم #${shortId} من ${storeName}. يرجى التوقف عن تحضيره.`;
+          const providerLink = `/provider?tab=orders`;
 
-    // 4. Web Push Notification to customer phone
-    try {
-      await sendPushToUser(order.customer_id, {
-        title,
-        body: message,
-        path: link,
-        tag: `husayniya-order-${orderId}`,
-        requireInteraction: true,
-      });
-    } catch {}
+          try {
+            await supabaseAdmin.from("notifications").insert({
+              user_id: storeOwnerId,
+              title: cancelTitle,
+              body: cancelBody,
+              link: providerLink,
+            });
+            await sendPushToUser(storeOwnerId, {
+              title: cancelTitle,
+              body: cancelBody,
+              path: providerLink,
+              tag: `husayniya-order-cancel-${orderId}`,
+              requireInteraction: true,
+            });
+          } catch {}
+        }
 
-    // 5. Notify store owner if customer cancelled the order
-    if (newStatus === "cancelled" && storeOwnerId) {
+        // Notify assigned driver if order had a driver
+        if (order.driver_id) {
+          try {
+            const drTitle = `❌ تم إلغاء الطلب #${shortId}`;
+            const drBody = `قام العميل بإلغاء الطلب رقم #${shortId}. تم إلغاء مهمة التوصيل.`;
+            const drLink = `/delivery?tab=available`;
+            await supabaseAdmin.from("notifications").insert({
+              user_id: order.driver_id,
+              title: drTitle,
+              body: drBody,
+              link: drLink,
+            });
+            await sendPushToUser(order.driver_id, {
+              title: drTitle,
+              body: drBody,
+              path: drLink,
+              tag: `husayniya-order-cancel-dr-${orderId}`,
+              requireInteraction: true,
+            });
+          } catch {}
+        }
+      } else {
+        // Store or admin cancelled -> Notify CUSTOMER
+        const customerCancelTitle = `❌ اعتذار: تم إلغاء طلبك من قِبل ${storeName}`;
+        const customerCancelBody = extra?.note
+          ? `نعتذر منك، قام ${storeName} بإلغاء طلبك رقم #${shortId}: ${extra.note}`
+          : `نعتذر منك، قام ${storeName} بإلغاء طلبك رقم #${shortId} لعدم إمكانية توفيره حالياً.`;
+        const customerLink = `/orders?filter=cancelled&chat=${orderId}`;
+
+        try {
+          await supabaseAdmin.from("notifications").insert({
+            user_id: order.customer_id,
+            title: customerCancelTitle,
+            body: customerCancelBody,
+            link: customerLink,
+          });
+          await sendPushToUser(order.customer_id, {
+            title: customerCancelTitle,
+            body: customerCancelBody,
+            path: customerLink,
+            tag: `husayniya-order-cancel-cust-${orderId}`,
+            requireInteraction: true,
+          });
+        } catch {}
+
+        if (order.driver_id) {
+          try {
+            const drTitle = `❌ تم إلغاء الطلب #${shortId}`;
+            const drBody = `قام ${storeName} بإلغاء الطلب رقم #${shortId}. تم إلغاء مهمة التوصيل.`;
+            const drLink = `/delivery?tab=available`;
+            await supabaseAdmin.from("notifications").insert({
+              user_id: order.driver_id,
+              title: drTitle,
+              body: drBody,
+              link: drLink,
+            });
+            await sendPushToUser(order.driver_id, {
+              title: drTitle,
+              body: drBody,
+              path: drLink,
+              tag: `husayniya-order-cancel-dr-${orderId}`,
+              requireInteraction: true,
+            });
+          } catch {}
+        }
+      }
+    } else {
+      // Normal progression (accepted, preparing, on_the_way, delivered) -> Notify CUSTOMER
+      const link = `/orders?filter=active&chat=${orderId}`;
       try {
-        const cancelTitle = `❌ تم إلغاء الطلب #${orderId.slice(0, 8)} (${storeName})`;
-        const cancelBody = extra?.note || `قام العميل بإلغاء الطلب. يرجى إيقاف تحضير الطلب.`;
-        const providerLink = `/provider?tab=orders`;
         await supabaseAdmin.from("notifications").insert({
-          user_id: storeOwnerId,
-          title: cancelTitle,
-          body: cancelBody,
-          link: providerLink,
+          user_id: order.customer_id,
+          title,
+          body: message,
+          link,
         });
-        await sendPushToUser(storeOwnerId, {
-          title: cancelTitle,
-          body: cancelBody,
-          path: providerLink,
-          tag: `husayniya-order-cancel-${orderId}`,
+      } catch {}
+
+      try {
+        await sendPushToUser(order.customer_id, {
+          title,
+          body: message,
+          path: link,
+          tag: `husayniya-order-${orderId}`,
           requireInteraction: true,
         });
       } catch {}
-    }
 
-    // 6. Notify active delivery drivers when order is preparing and needs a driver
-    if (newStatus === "preparing" && !order.driver_id) {
-      try {
-        const activeDrivers = await supabaseAdmin
-          .from("drivers")
-          .select("user_id")
-          .eq("is_active", true);
+      // If preparing and needs a driver, notify active drivers
+      if (newStatus === "preparing" && !order.driver_id) {
+        try {
+          const activeDrivers = await supabaseAdmin
+            .from("drivers")
+            .select("user_id")
+            .eq("is_active", true);
 
-        if (activeDrivers.data && activeDrivers.data.length > 0) {
-          const driverTitle = `🛵 طلب جديد متاح للتوصيل (${storeName})`;
-          const driverBody = `يوجد طلب جديد قيد التحضير في ${storeName}. افتح رادار التوصيل لمعاينة الطلب وقبوله.`;
-          const driverPath = `/delivery?tab=available`;
+          if (activeDrivers.data && activeDrivers.data.length > 0) {
+            const driverTitle = `🛵 طلب جديد متاح للتوصيل (${storeName})`;
+            const driverBody = `يوجد طلب جديد قيد التحضير في ${storeName}. افتح رادار التوصيل لمعاينة الطلب وقبوله.`;
+            const driverPath = `/delivery?tab=available`;
 
-          for (const driver of activeDrivers.data) {
-            await supabaseAdmin.from("notifications").insert({
-              user_id: driver.user_id,
-              title: driverTitle,
-              body: driverBody,
-              link: driverPath,
-            });
-            await sendPushToUser(driver.user_id, {
-              title: driverTitle,
-              body: driverBody,
-              path: driverPath,
-              tag: `husayniya-driver-available-${orderId}`,
-            });
+            for (const driver of activeDrivers.data) {
+              await supabaseAdmin.from("notifications").insert({
+                user_id: driver.user_id,
+                title: driverTitle,
+                body: driverBody,
+                link: driverPath,
+              });
+              await sendPushToUser(driver.user_id, {
+                title: driverTitle,
+                body: driverBody,
+                path: driverPath,
+                tag: `husayniya-driver-available-${orderId}`,
+              });
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
   } catch (e) {
     console.error("notifyOrderStatusUpdate failed:", e);
