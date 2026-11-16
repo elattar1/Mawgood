@@ -39,7 +39,6 @@ import {
   VolumeX,
   Bell,
   BellOff,
-  BellRing,
 } from "lucide-react";
 import { toast } from "sonner";
 import { registerPushDevice, sendTestPush } from "@/lib/push.functions";
@@ -1557,26 +1556,6 @@ export function Dashboard({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs"
-                  onClick={toggleSound}
-                >
-                  {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
-                  {soundEnabled ? "صوت التنبيهات مفعّل" : "الصوت صامت"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={pushGranted ? "outline" : "secondary"}
-                  className="gap-1.5 text-xs"
-                  onClick={handlePushAction}
-                  disabled={pushBusy}
-                  title={pushGranted ? "إشعارات الهاتف للطلبات مفعلة (انقر للتجربة)" : "تفعيل إشعارات الهاتف للطلبات الجديدة"}
-                >
-                  {pushGranted ? <Bell className="size-4 text-emerald-500" /> : <BellRing className="size-4 text-amber-500 animate-pulse" />}
-                  {pushGranted ? "إشعارات الهاتف مفعلة ✅" : "تفعيل إشعارات الهاتف 🔔"}
-                </Button>
                 <Badge variant="outline" className="font-bold text-xs">{visibleTasks.length} طلب مسجل</Badge>
               </div>
             </div>
