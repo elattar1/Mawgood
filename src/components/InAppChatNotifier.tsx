@@ -9,6 +9,7 @@ import { registerPushDevice } from "@/lib/push.functions";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { Button } from "@/components/ui/button";
 import { playCustomerOrderAlert, getCustomerSoundEnabled } from "@/lib/order-alert";
+import { supabase } from "@/integrations/supabase/client";
 
 function playMessageChime() {
   try {
@@ -137,6 +138,33 @@ export function InAppChatNotifier() {
     },
   });
 
+  // استقبال الإشعارات وتحديثات الطلبات فورياً عبر Supabase WebSocket في أجزاء من الثانية
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`in-app-notifs-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          qc.invalidateQueries({ queryKey: ["in-app-chat-notifications", user.id] });
+          qc.invalidateQueries({ queryKey: ["notifications"] });
+          qc.invalidateQueries({ queryKey: ["customer-orders"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, qc]);
+
   // Check for incoming chat messages & order update notifications
   useEffect(() => {
     if (!notifications || !Array.isArray(notifications) || !user) return;
@@ -210,6 +238,7 @@ export function InAppChatNotifier() {
       });
 
       if (isOrderStatus) {
+        qc.invalidateQueries({ queryKey: ['customer-orders'] });
         const soundEnabled = getCustomerSoundEnabled();
         playCustomerOrderAlert(detectedStatus, soundEnabled);
       } else {

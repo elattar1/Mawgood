@@ -3,7 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Package, Check, X, MapPin, MessageCircle, Store, Bike, Star, Volume2, VolumeX } from 'lucide-react';
+import { RefreshCw, Package, Check, X, MapPin, MessageCircle, Store, Bike, Star, Volume2, VolumeX, Clock, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/AppShell';
@@ -22,6 +22,9 @@ import { OrderReviewDialog } from '@/components/OrderReviewDialog';
 import { ChatUnreadBadge } from '@/components/ChatUnreadBadge';
 import { useOrderChatUnreadMap } from '@/lib/chat-unread';
 import { playCustomerOrderAlert, getCustomerSoundEnabled, setCustomerSoundEnabled } from '@/lib/order-alert';
+import { useAuth } from '@/lib/auth';
+import { supabase } from '@/integrations/supabase/client';
+import { OrderTimelineProgressBar } from '@/components/OrderTimelineProgressBar';
 
 export const Route = createFileRoute('/_authenticated/orders')({
   validateSearch: (s: SearchSchemaInput & { filter?: unknown; chat?: unknown }) => ({
@@ -69,6 +72,7 @@ function Orders() {
   const [reviewOrder, setReviewOrder] = useState<any | null>(null);
   const [reviewsVersion, setReviewsVersion] = useState(0);
   const { getUnreadCount } = useOrderChatUnreadMap(data?.orders);
+  const { user } = useAuth();
 
   const [soundEnabled, setSoundEnabled] = useState(() => getCustomerSoundEnabled());
 
@@ -116,6 +120,116 @@ function Orders() {
       prevStatusesRef.current.set(o.id, o.status);
     }
   }, [data?.orders, catalog?.stores, soundEnabled]);
+
+  // اشتراك فوري عبر Supabase WebSocket لتحديث مراحل الطلبات في أجزاء من الثانية فور تغيير المتجر للحالة
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`customer-live-orders-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `customer_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+
+          // تحديث فوري في كاش React Query في نفس اللحظة (Zero Latency Cache Update)
+          client.setQueryData(['customer-orders'], (old: any) => {
+            if (!old || !old.orders) return old;
+            return {
+              ...old,
+              orders: old.orders.map((o: any) =>
+                o.id === updated.id ? { ...o, ...updated } : o
+              ),
+            };
+          });
+
+          client.invalidateQueries({ queryKey: ['customer-orders'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders',
+          filter: `customer_id=eq.${user.id}`,
+        },
+        () => {
+          client.invalidateQueries({ queryKey: ['customer-orders'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings',
+          filter: `customer_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+          client.setQueryData(['customer-orders'], (old: any) => {
+            if (!old || !old.bookings) return old;
+            return {
+              ...old,
+              bookings: old.bookings.map((b: any) =>
+                b.id === updated.id ? { ...b, ...updated } : b
+              ),
+            };
+          });
+          client.invalidateQueries({ queryKey: ['customer-orders'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'service_requests',
+          filter: `customer_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+          client.setQueryData(['customer-orders'], (old: any) => {
+            if (!old || !old.services) return old;
+            return {
+              ...old,
+              services: old.services.map((s: any) =>
+                s.id === updated.id ? { ...s, ...updated } : s
+              ),
+            };
+          });
+          client.invalidateQueries({ queryKey: ['customer-orders'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          client.invalidateQueries({ queryKey: ['customer-orders'] });
+          client.invalidateQueries({ queryKey: ['notifications'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, client]);
 
   useEffect(() => {
     if (chat) {
@@ -285,29 +399,7 @@ function Orders() {
                 </div>
               </div>
 
-              {r.status !== 'cancelled' && (
-                <ol className="my-5 grid grid-flow-col auto-cols-fr gap-1 border-y py-4">
-                  {flows[r.kind].map((s, i) => (
-                    <li
-                      key={s}
-                      className={`min-w-0 text-center ${
-                        i <= flows[r.kind].indexOf(r.status) ? 'text-primary' : 'text-muted-foreground'
-                      }`}
-                    >
-                      <span
-                        className={`mx-auto mb-2 grid size-6 place-items-center rounded-full ${
-                          i <= flows[r.kind].indexOf(r.status)
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
-                        }`}
-                      >
-                        <Check size={12} />
-                      </span>
-                      <span className="block break-words text-[10px] sm:text-xs">{STATUS_LABELS[s]}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <OrderTimelineProgressBar kind={r.kind} status={r.status} />
 
               {/* أزرار الإجراءات السريعة (المحادثة الفورية، التقييم، وإلغاء الطلب) */}
               <div className="mt-4 flex flex-wrap items-center gap-2">
