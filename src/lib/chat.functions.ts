@@ -11,6 +11,8 @@ export interface ChatMessage {
   message: string;
   created_at: string;
   stage?: "store" | "driver";
+  is_read?: boolean;
+  read_at?: string | null;
 }
 
 export interface OrderChatInfo {
@@ -48,7 +50,19 @@ function parseMessagesFromNotes(notes: string | null | undefined): { cleanNotes:
   try {
     const parsed = JSON.parse(match[1]);
     const cleanNotes = notes.replace(/<!-- CHAT_V1: [\s\S]*? -->/, "").trim();
-    return { cleanNotes, messages: Array.isArray(parsed) ? parsed : [] };
+    const messages: ChatMessage[] = (Array.isArray(parsed) ? parsed : []).map((m: any) => ({
+      id: String(m.id),
+      order_id: String(m.order_id),
+      sender_id: String(m.sender_id),
+      sender_role: m.sender_role,
+      sender_name: String(m.sender_name),
+      message: String(m.message),
+      created_at: String(m.created_at),
+      stage: m.stage,
+      is_read: m.is_read !== undefined ? Boolean(m.is_read) : Boolean(m.read_at),
+      read_at: m.read_at || null,
+    }));
+    return { cleanNotes, messages };
   } catch {
     return { cleanNotes: notes.trim(), messages: [] };
   }
@@ -155,6 +169,8 @@ export const getOrderChat = createServerFn({ method: "POST" })
           message: String(m.message),
           created_at: String(m.created_at),
           stage: m.stage || (m.sender_role === "driver" ? "driver" : m.sender_role === "store" ? "store" : undefined),
+          is_read: m.is_read !== undefined ? Boolean(m.is_read) : Boolean(m.read_at),
+          read_at: m.read_at || null,
         }));
       } else {
         const parsed = parseMessagesFromNotes(order.notes);
@@ -163,6 +179,46 @@ export const getOrderChat = createServerFn({ method: "POST" })
     } catch {
       const parsed = parseMessagesFromNotes(order.notes);
       rawMessages = parsed.messages;
+    }
+
+    // Auto-mark incoming messages from other parties as read when opening chat
+    const isCompleted = order.status === "delivered" || order.status === "completed";
+    const nowIso = new Date().toISOString();
+    let hasUnreadFromOthers = false;
+
+    for (const m of rawMessages) {
+      if (isCompleted && !m.is_read) {
+        m.is_read = true;
+        m.read_at = m.read_at || nowIso;
+        hasUnreadFromOthers = true;
+      } else if (m.sender_id !== context.userId && m.sender_id !== "system" && !m.is_read) {
+        m.is_read = true;
+        m.read_at = nowIso;
+        hasUnreadFromOthers = true;
+      }
+    }
+
+    if (hasUnreadFromOthers) {
+      try {
+        const { cleanNotes } = parseMessagesFromNotes(order.notes);
+        const serialized = serializeMessagesToNotes(cleanNotes, rawMessages);
+        void supabaseAdmin.from("orders").update({ notes: serialized }).eq("id", data.orderId);
+      } catch {}
+
+      try {
+        void (supabaseAdmin.from("order_messages" as any) as any)
+          .update({ is_read: true, read_at: nowIso })
+          .eq("order_id", data.orderId)
+          .neq("sender_id", context.userId);
+      } catch {}
+
+      try {
+        void supabaseAdmin
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("user_id", context.userId)
+          .ilike("link", `%chat=${data.orderId}%`);
+      } catch {}
     }
 
     // Separation of chats:
@@ -287,11 +343,13 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
       message: data.message,
       created_at: new Date().toISOString(),
       stage: chatStage,
+      is_read: false,
+      read_at: null,
     };
 
-    let savedInTable = false;
+    // 1. Try to insert into order_messages table
     try {
-      const insertRes = await (supabaseAdmin.from("order_messages" as any) as any).insert({
+      await (supabaseAdmin.from("order_messages" as any) as any).insert({
         id: newMessage.id,
         order_id: newMessage.order_id,
         sender_id: newMessage.sender_id,
@@ -300,20 +358,18 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
         message: newMessage.message,
         created_at: newMessage.created_at,
         stage: newMessage.stage,
+        is_read: false,
       });
-      if (!insertRes.error) {
-        savedInTable = true;
-      }
-    } catch {
-      savedInTable = false;
-    }
+    } catch {}
 
-    // Always guarantee persistence in order notes if table didn't save
-    if (!savedInTable) {
+    // 2. Always guarantee persistence in order notes for cross-platform reliability
+    try {
       const { cleanNotes, messages } = parseMessagesFromNotes(order.notes);
       const updatedMessages = [...messages, newMessage];
       const serialized = serializeMessagesToNotes(cleanNotes, updatedMessages);
       await supabaseAdmin.from("orders").update({ notes: serialized }).eq("id", data.orderId);
+    } catch (e) {
+      console.error("Failed to update order notes with new message:", e);
     }
 
     // Intelligent notification routing based on chat stage (both in-app and web push)
@@ -558,11 +614,50 @@ export const readOrderChatNotifications = createServerFn({ method: "POST" })
   .inputValidator(z.object({ orderId: z.string().uuid() }))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const result = await supabaseAdmin
+
+    // 1. Mark in-app notifications as read
+    await supabaseAdmin
       .from("notifications")
       .update({ is_read: true })
       .eq("user_id", context.userId)
       .ilike("link", `%chat=${data.orderId}%`);
-    if (result.error) throw new Error("تعذر تحديث إشعارات المحادثة");
+
+    // 2. Mark incoming messages in order notes as read
+    try {
+      const orderRes = await supabaseAdmin
+        .from("orders")
+        .select("notes")
+        .eq("id", data.orderId)
+        .maybeSingle();
+
+      if (orderRes.data?.notes) {
+        const { cleanNotes, messages } = parseMessagesFromNotes(orderRes.data.notes);
+        let changed = false;
+        const nowIso = new Date().toISOString();
+        const updated = messages.map((m) => {
+          if (m.sender_id !== context.userId && !m.is_read) {
+            changed = true;
+            return { ...m, is_read: true, read_at: nowIso };
+          }
+          return m;
+        });
+
+        if (changed) {
+          const serialized = serializeMessagesToNotes(cleanNotes, updated);
+          await supabaseAdmin.from("orders").update({ notes: serialized }).eq("id", data.orderId);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to mark notes messages as read:", e);
+    }
+
+    // 3. Mark in order_messages table if exists
+    try {
+      await (supabaseAdmin.from("order_messages" as any) as any)
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq("order_id", data.orderId)
+        .neq("sender_id", context.userId);
+    } catch {}
+
     return { success: true };
   });

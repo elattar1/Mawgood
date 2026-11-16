@@ -22,7 +22,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getOrderChat, sendOrderChatMessage, type OrderChatInfo } from "@/lib/chat.functions";
-import { useOrderChatUnreadMap } from "@/lib/chat-unread";
+import { useOrderChatUnreadMap, recordChatSeen, clearActiveChatOrder, setActiveChatOrderId } from "@/lib/chat-unread";
+import { useAuth } from "@/lib/auth";
 
 interface OrderChatDialogProps {
   orderId: string | null;
@@ -76,6 +77,7 @@ const DRIVER_TO_CUSTOMER_PRESETS = [
 ];
 
 export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialogProps) {
+  const { user } = useAuth();
   const getChat = useServerFn(getOrderChat);
   const sendMessage = useServerFn(sendOrderChatMessage);
   const qc = useQueryClient();
@@ -85,21 +87,22 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef<number>(0);
 
-  // Set active chat order in global window state and mark unread messages as read
+  // Set active chat order in global window state and mark unread messages as read immediately
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (open && orderId) {
-      (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID = orderId;
+      setActiveChatOrderId(orderId);
+      recordChatSeen(orderId, user?.id);
       markChatAsRead(orderId);
-    } else if (!open && (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID === orderId) {
-      (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID = null;
+    } else if (!open && orderId) {
+      clearActiveChatOrder(orderId);
     }
     return () => {
-      if ((window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID === orderId) {
-        (window as any).__HUSAYNIYA_ACTIVE_CHAT_ORDER_ID = null;
+      if (orderId) {
+        clearActiveChatOrder(orderId);
       }
     };
-  }, [open, orderId, markChatAsRead]);
+  }, [open, orderId, markChatAsRead, user?.id]);
 
   const queryKey = ["order-chat", orderId];
 
@@ -109,6 +112,14 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
     enabled: !!orderId && open,
     refetchInterval: open ? 3000 : false, // Auto-poll every 3s when chat dialog is open
   });
+
+  // When messages load or update while chat is open, immediately mark as seen
+  useEffect(() => {
+    if (open && orderId && data?.messages && data.messages.length > 0) {
+      recordChatSeen(orderId, user?.id);
+      markChatAsRead(orderId);
+    }
+  }, [open, orderId, data?.messages?.length, markChatAsRead, user?.id]);
 
   // Sound cue when new incoming message arrives
   useEffect(() => {
@@ -376,9 +387,18 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                       </div>
 
                       {isMe && (
-                        <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground/70">
-                          <CheckCheck className="size-3 text-primary" />
-                          <span>تم الإرسال</span>
+                        <div className="flex items-center gap-1 px-1 text-[10px]">
+                          {msg.is_read ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium transition-colors duration-200">
+                              <CheckCheck className="size-3.5 text-emerald-500 dark:text-emerald-400 stroke-[2.5]" />
+                              <span>تمت القراءة</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground/70">
+                              <CheckCheck className="size-3 text-muted-foreground/60 stroke-[1.8]" />
+                              <span>تم الإرسال</span>
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
