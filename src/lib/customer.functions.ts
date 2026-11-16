@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 import { bookingInput, checkoutInput, serviceInput, canCustomerCancel } from './customer-rules';
+import { formatOrderPushPayload } from './push-rules';
 import { requestKinds } from './dashboard-rules';
 import { TIME_SLOTS } from './labels';
 
@@ -15,7 +16,7 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
     // 1. Ensure store exists in DB (auto-seed if it's a curated store)
     let store = await context.supabase
       .from('stores')
-      .select('id,is_active,is_open,category,delivery_fee,commission_rate')
+      .select('id,name,owner_id,is_active,is_open,category,delivery_fee,commission_rate')
       .eq('id', data.store_id)
       .maybeSingle();
 
@@ -100,6 +101,75 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
       console.error('place_order error:', result.error);
       throw new Error('تعذر إرسال الطلب؛ تحقق من توفر المنتجات وحاول مرة أخرى');
     }
+
+    const orderId = String(result.data);
+    const shortId = orderId.slice(0, 8);
+    const storeName = store.data.name || 'المتجر';
+    const storeOwnerId = store.data.owner_id;
+    const totalItemsCount = resolvedItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
+
+    // 5. Send real-time in-app notification & Web Push to store owner (or admins)
+    try {
+      const { sendPushToUser } = await import('@/lib/push.functions');
+      const orderPayload = formatOrderPushPayload({
+        orderId,
+        storeName,
+        itemsCount: totalItemsCount,
+        phone: data.phone,
+        address: data.address,
+        notes: data.notes,
+      });
+
+      if (storeOwnerId) {
+        // In-app notification for the store owner
+        await supabaseAdmin.from('notifications').insert({
+          user_id: storeOwnerId,
+          title: orderPayload.title,
+          body: orderPayload.body,
+          link: orderPayload.path,
+        });
+
+        // Web Push notification to store owner's mobile/desktop (shows even when locked/app closed)
+        await sendPushToUser(storeOwnerId, {
+          title: orderPayload.title,
+          body: orderPayload.body,
+          path: orderPayload.path,
+          tag: orderPayload.tag,
+          requireInteraction: orderPayload.requireInteraction,
+        });
+      } else {
+        // Fallback for store without an assigned owner: notify platform administrators
+        const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
+        if (adminRoles.data && adminRoles.data.length > 0) {
+          for (const admin of adminRoles.data) {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: admin.user_id,
+              title: `🛍️ طلب جديد للمتجر (${storeName})`,
+              body: orderPayload.body,
+              link: `/admin?tab=orders&order=${orderId}`,
+            });
+            await sendPushToUser(admin.user_id, {
+              title: `🛍️ طلب جديد للمتجر (${storeName})`,
+              body: orderPayload.body,
+              path: `/admin?tab=orders&order=${orderId}`,
+              tag: orderPayload.tag,
+              requireInteraction: orderPayload.requireInteraction,
+            });
+          }
+        }
+      }
+
+      // Customer in-app order confirmation
+      await supabaseAdmin.from('notifications').insert({
+        user_id: context.userId,
+        title: `🛍️ تم تأكيد إرسال طلبك إلى ${storeName}`,
+        body: `طلبك رقم #${shortId} قيد المراجعة لدى المتجر. سنوافيك بإشعار فور بدء التحضير.`,
+        link: `/orders?filter=active&chat=${orderId}`,
+      });
+    } catch (notifErr) {
+      console.error('Failed to dispatch order notification/push:', notifErr);
+    }
+
     return { id: result.data };
   });
 
@@ -107,11 +177,36 @@ export const createBooking = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .inputValidator(bookingInput)
   .handler(async ({ data, context }) => {
-    const store = await context.supabase.from('stores').select('category,is_active,is_open').eq('id', data.store_id).single();
+    const store = await context.supabase.from('stores').select('id,name,owner_id,category,is_active,is_open').eq('id', data.store_id).single();
     if (!store.data?.is_active || !store.data.is_open || store.data.category !== 'doctors') throw new Error('الطبيب غير متاح للحجز');
     if (!TIME_SLOTS.includes(data.booking_time)) throw new Error('اختر موعدًا صحيحًا');
     const result = await context.supabase.from('bookings').insert({ ...data, customer_id: context.userId }).select('id').single();
     if (result.error) throw new Error('تعذر الحجز؛ تأكد من التاريخ وحاول مرة أخرى');
+
+    if (store.data?.owner_id) {
+      try {
+        const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+        const { sendPushToUser } = await import('@/lib/push.functions');
+        const docTitle = `🩺 حجز موعد جديد (${store.data.name || 'العيادة'})`;
+        const docBody = `حجز جديد بتاريخ ${data.booking_date} الساعة ${data.booking_time} باسم المريض: ${data.patient_name} (${data.phone})`;
+        await supabaseAdmin.from('notifications').insert({
+          user_id: store.data.owner_id,
+          title: docTitle,
+          body: docBody,
+          link: '/provider?tab=bookings',
+        });
+        await sendPushToUser(store.data.owner_id, {
+          title: docTitle,
+          body: docBody,
+          path: '/provider?tab=bookings',
+          tag: `husayniya-booking-${result.data.id}`,
+          requireInteraction: true,
+        });
+      } catch (err) {
+        console.error('Failed to dispatch booking push:', err);
+      }
+    }
+
     return result.data;
   });
 
@@ -119,7 +214,7 @@ export const createServiceRequest = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .inputValidator(serviceInput)
   .handler(async ({ data, context }) => {
-    const store = await context.supabase.from('stores').select('category,is_active,is_open').eq('id', data.store_id).single();
+    const store = await context.supabase.from('stores').select('id,name,owner_id,category,is_active,is_open').eq('id', data.store_id).single();
     if (!store.data?.is_active || !store.data.is_open || !['maintenance', 'home'].includes(store.data.category)) throw new Error('مقدم الخدمة غير متاح');
     if (data.image_paths.some(p => !p.startsWith(`${context.userId}/`) || p.includes('..'))) throw new Error('صور غير صالحة');
     const result = await context.supabase.from('service_requests').insert({
@@ -133,6 +228,31 @@ export const createServiceRequest = createServerFn({ method: 'POST' })
       customer_id: context.userId,
     }).select('id').single();
     if (result.error) throw new Error('تعذر إرسال طلب الخدمة');
+
+    if (store.data?.owner_id) {
+      try {
+        const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+        const { sendPushToUser } = await import('@/lib/push.functions');
+        const srvTitle = `🔧 طلب صيانة جديد (${store.data.name || 'مقدم الخدمة'})`;
+        const srvBody = `طلب جديد من ${data.phone} - العنوان: ${data.address}`;
+        await supabaseAdmin.from('notifications').insert({
+          user_id: store.data.owner_id,
+          title: srvTitle,
+          body: srvBody,
+          link: '/provider?tab=services',
+        });
+        await sendPushToUser(store.data.owner_id, {
+          title: srvTitle,
+          body: srvBody,
+          path: '/provider?tab=services',
+          tag: `husayniya-service-${result.data.id}`,
+          requireInteraction: true,
+        });
+      } catch (err) {
+        console.error('Failed to dispatch service push:', err);
+      }
+    }
+
     return result.data;
   });
 

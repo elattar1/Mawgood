@@ -38,7 +38,7 @@ export const sendTestPush = createServerFn({ method: 'POST' })
 
 export async function sendPushToUser(
   userId: string,
-  payload: { title: string; body: string; path?: string; tag?: string }
+  payload: { title: string; body: string; path?: string; tag?: string; requireInteraction?: boolean }
 ): Promise<void> {
   try {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
@@ -82,11 +82,20 @@ export async function sendPushToUser(
                     body: payload.body,
                   },
                   webpush: {
+                    headers: {
+                      Urgency: 'high',
+                    },
                     notification: {
                       icon: '/icon-192.png',
                       badge: '/icon-192.png',
                       tag: payload.tag || 'husayniya-chat',
                       renotify: true,
+                      require_interaction: payload.requireInteraction ?? true,
+                      vibrate: [250, 100, 250, 100, 250],
+                      data: {
+                        path: payload.path || '/orders',
+                        link: payload.path || '/orders',
+                      },
                     },
                     fcm_options: {
                       link: payload.path || '/orders',

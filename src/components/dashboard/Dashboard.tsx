@@ -36,8 +36,12 @@ import {
   AlertTriangle,
   Volume2,
   VolumeX,
+  Bell,
+  BellOff,
+  BellRing,
 } from "lucide-react";
 import { toast } from "sonner";
+import { registerPushDevice, sendTestPush } from "@/lib/push.functions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -223,6 +227,46 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
       toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة 🔔" : "تم كتم صوت التنبيهات 🔕");
       return next;
     });
+  };
+
+  const registerDevice = useServerFn(registerPushDevice);
+  const sendTest = useServerFn(sendTestPush);
+  const [pushGranted, setPushGranted] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushToken, setPushToken] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setPushGranted(Notification.permission === "granted");
+    }
+  }, []);
+
+  const handlePushAction = async () => {
+    setPushBusy(true);
+    try {
+      const { enablePush } = await import("@/lib/push-browser");
+      const res = await enablePush();
+      if (res.status === "registered" && res.token) {
+        setPushToken(res.token);
+        setPushGranted(true);
+        await registerDevice({ data: { token: res.token } });
+
+        try {
+          await sendTest({ data: { token: res.token } });
+          toast.success("إشعارات الهاتف مفعّلة! تم إرسال إشعار تجريبي لموبايلك للتأكد من وصوله وهو مقفول 🔔");
+        } catch {
+          toast.success("تم تفعيل إشعارات الهاتف بنجاح! ستصلك تنبيهات الطلبات الجديدة خارج الموقع.");
+        }
+      } else if (res.status === "denied") {
+        toast.error("الإشعارات غير مسموحة في متصفحك. يرجى تفعيلها من إعدادات الموقع.");
+      } else {
+        toast.error("تعذر تفعيل إشعارات الهاتف في هذا المتصفح.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "تعذر الاتصال بخدمة الإشعارات");
+    } finally {
+      setPushBusy(false);
+    }
   };
 
   const pendingTasks = tasks.filter(t => t.status === "pending");
@@ -456,6 +500,16 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={pushGranted ? "إشعارات الهاتف للطلبات مفعلة" : "تفعيل إشعارات الهاتف للطلبات"}
+            title={pushGranted ? "إشعارات الهاتف للطلبات مفعلة (انقر لإرسال تجربة)" : "تفعيل إشعارات الهاتف للطلبات الجديدة"}
+            onClick={handlePushAction}
+            disabled={pushBusy}
+          >
+            {pushGranted ? <Bell className="size-4 text-emerald-500" /> : <BellOff className="size-4 text-amber-500" />}
+          </Button>
           <Button
             variant="outline"
             size="icon"
@@ -1474,6 +1528,17 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
                 >
                   {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
                   {soundEnabled ? "صوت التنبيهات مفعّل" : "الصوت صامت"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={pushGranted ? "outline" : "secondary"}
+                  className="gap-1.5 text-xs"
+                  onClick={handlePushAction}
+                  disabled={pushBusy}
+                  title={pushGranted ? "إشعارات الهاتف للطلبات مفعلة (انقر للتجربة)" : "تفعيل إشعارات الهاتف للطلبات الجديدة"}
+                >
+                  {pushGranted ? <Bell className="size-4 text-emerald-500" /> : <BellRing className="size-4 text-amber-500 animate-pulse" />}
+                  {pushGranted ? "إشعارات الهاتف مفعلة ✅" : "تفعيل إشعارات الهاتف 🔔"}
                 </Button>
                 <Badge variant="outline" className="font-bold text-xs">{visibleTasks.length} طلب مسجل</Badge>
               </div>
