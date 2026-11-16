@@ -638,7 +638,7 @@ export const updateRequest = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
-    const existing = await context.supabase.from(data.kind).select("store_id,status").eq("id", data.id).single();
+    const existing = await context.supabase.from(data.kind).select("store_id,status,customer_id").eq("id", data.id).single();
     if (existing.error || !existing.data) throw new Error("الطلب غير موجود");
     const [owner, admin] = await Promise.all([
       context.supabase.rpc("is_store_owner", { _store_id: existing.data.store_id }),
@@ -692,6 +692,34 @@ export const updateRequest = createServerFn({ method: "POST" })
         await notifyOrderStatusUpdate(data.id, data.status);
       } catch (e) {
         console.error("notifyOrderStatusUpdate failed:", e);
+      }
+    } else if (data.kind === "bookings" && (existing.data as any)?.customer_id) {
+      try {
+        const { sendNotificationWithPush } = await import("@/lib/push.functions");
+        const statusText = STATUS_LABELS[data.status] || data.status;
+        await sendNotificationWithPush({
+          userId: (existing.data as any).customer_id,
+          title: `🩺 تحديث حالة موعد الكشف: ${statusText}`,
+          body: `تم تحديث حالة موعدك في العيادة إلى "${statusText}".`,
+          path: "/orders?filter=active",
+          tag: `husayniya-booking-${data.id}`,
+        });
+      } catch (e) {
+        console.error("Booking notification error:", e);
+      }
+    } else if (data.kind === "service_requests" && (existing.data as any)?.customer_id) {
+      try {
+        const { sendNotificationWithPush } = await import("@/lib/push.functions");
+        const statusText = STATUS_LABELS[data.status] || data.status;
+        await sendNotificationWithPush({
+          userId: (existing.data as any).customer_id,
+          title: `🔧 تحديث طلب الصيانة: ${statusText}`,
+          body: `تم تحديث حالة طلب الخدمة إلى "${statusText}"${data.quoted_price ? ` بقيمة ${data.quoted_price} ج.م` : ""}.`,
+          path: "/orders?filter=active",
+          tag: `husayniya-service-${data.id}`,
+        });
+      } catch (e) {
+        console.error("Service request notification error:", e);
       }
     }
 
@@ -837,19 +865,19 @@ export const sendBroadcastNotification = createServerFn({ method: "POST" })
       }
     }
 
-    // 2. إرسال Push Notifications للهواتف المفعلة
+    // 2. إرسال Push Notifications للهواتف المفعلة وضمان انتظار إرسالها قبل إنهاء الدالة
     try {
       const { sendPushToUser } = await import("@/lib/push.functions");
-      Promise.allSettled(
+      await Promise.allSettled(
         targetUserIds.map((uid) =>
           sendPushToUser(uid, {
             title: data.title,
             body: data.body,
             path: data.path || "/",
-            tag: "broadcast-admin",
+            tag: `husayniya-broadcast-${Date.now()}`,
           })
         )
-      ).catch((e) => console.error("Broadcast push error:", e));
+      );
     } catch (pushErr) {
       console.warn("Could not import or trigger push notifications:", pushErr);
     }
@@ -1039,25 +1067,30 @@ export const requestStoreDeletion = createServerFn({ method: "POST" })
       }
     } catch {}
 
-    // Fallback: Notify admins if complaints_suggestions table is not present
-    if (!complaintSaved) {
+    // Notify admins with push & in-app
+    try {
+      const { sendNotificationWithPush } = await import("@/lib/push.functions");
       const adminRoles = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "admin");
       if (adminRoles.data && adminRoles.data.length > 0) {
         for (const admin of adminRoles.data) {
-          await supabaseAdmin.from("notifications").insert({
-            user_id: admin.user_id,
+          await sendNotificationWithPush({
+            userId: admin.user_id,
             title: `🗑️ [طلب حذف متجر]: ${store.data.name}`,
             body: fullDescription,
-            link: "/admin?tab=stores",
+            path: "/admin?tab=stores",
+            tag: `husayniya-store-del-${data.storeId}`,
           });
         }
       }
-      await supabaseAdmin.from("notifications").insert({
-        user_id: context.userId,
+      await sendNotificationWithPush({
+        userId: context.userId,
         title: "تم استلام طلب حذف المتجر",
         body: `تم استلام طلبك لحذف المتجر "${store.data.name}" بنجاح وجاري مراجعته من قبل إدارة المنصة.`,
-        link: "/provider",
+        path: "/provider",
+        tag: `husayniya-store-del-confirm-${data.storeId}`,
       });
+    } catch (e) {
+      console.warn("Could not send store deletion notifications:", e);
     }
 
     // 4. Best-effort insert into store_deletion_requests if the table exists
@@ -1283,23 +1316,35 @@ export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
         await supabaseAdmin.from("stores").delete().eq("id", storeId);
       }
 
-      // 2. Notify owner
-      await supabaseAdmin.from("notifications").insert({
-        user_id: ownerId,
-        title: "تمت الموافقة على حذف المتجر ✅",
-        body: `تمت الموافقة على طلب حذف متجر «${storeName}» وتم حذفه وإزالته من التطبيق نهائياً.${data.admin_notes ? " ملاحظات الإدارة: " + data.admin_notes : ""}`,
-        is_read: false,
-      });
+      // 2. Notify owner with push & in-app
+      try {
+        const { sendNotificationWithPush } = await import("@/lib/push.functions");
+        await sendNotificationWithPush({
+          userId: ownerId,
+          title: "تمت الموافقة على حذف المتجر ✅",
+          body: `تمت الموافقة على طلب حذف متجر «${storeName}» وتم حذفه وإزالته من التطبيق نهائياً.${data.admin_notes ? " ملاحظات الإدارة: " + data.admin_notes : ""}`,
+          path: "/account",
+          tag: `husayniya-store-del-approved-${storeId}`,
+        });
+      } catch (err) {
+        console.warn("Could not notify owner:", err);
+      }
 
       return { success: true, approved: true };
     } else {
-      // Reject: notify owner
-      await supabaseAdmin.from("notifications").insert({
-        user_id: ownerId,
-        title: "تم رفض طلب حذف المتجر ❌",
-        body: `تم رفض طلب حذف متجر «${storeName}». ${data.admin_notes ? "ملاحظة الإدارة: " + data.admin_notes : ""}`,
-        is_read: false,
-      });
+      // Reject: notify owner with push & in-app
+      try {
+        const { sendNotificationWithPush } = await import("@/lib/push.functions");
+        await sendNotificationWithPush({
+          userId: ownerId,
+          title: "تم رفض طلب حذف المتجر ❌",
+          body: `تم رفض طلب حذف متجر «${storeName}». ${data.admin_notes ? "ملاحظة الإدارة: " + data.admin_notes : ""}`,
+          path: "/provider",
+          tag: `husayniya-store-del-rejected-${storeId}`,
+        });
+      } catch (err) {
+        console.warn("Could not notify owner:", err);
+      }
 
       return { success: true, approved: false };
     }

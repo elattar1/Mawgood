@@ -12,6 +12,7 @@ import {
   Trash2,
   Save,
   Check,
+  X,
   RefreshCw,
   ShieldCheck,
   Search,
@@ -92,7 +93,23 @@ function tasksFrom(data: DashboardData): Task[] {
   ].sort((a,b) => b.created_at.localeCompare(a.created_at));
 }
 
-export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: boolean; search: string; onSearch: (s: string) => void; tab: string; onTab: (s: string) => void }) {
+export function Dashboard({
+  admin,
+  search,
+  onSearch,
+  tab,
+  onTab,
+  initialOrderId,
+  initialChatOrderId,
+}: {
+  admin: boolean;
+  search: string;
+  onSearch: (s: string) => void;
+  tab: string;
+  onTab: (s: string) => void;
+  initialOrderId?: string;
+  initialChatOrderId?: string;
+}) {
   const { user } = useAuth();
   const { data } = useSuspenseQuery(dashboardQuery(admin));
   const client = useQueryClient();
@@ -207,6 +224,26 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
   const totals = earnings(tasks);
   const pending = tasks.filter(t => !["delivered", "completed", "cancelled"].includes(t.status)).length;
   const { getUnreadCount } = useOrderChatUnreadMap(data.orders);
+
+  // فتح تفاصيل الطلب تلقائياً فوراً عند النقر على إشعار طلب محدد من شاشة القفل أو الإشعارات
+  useEffect(() => {
+    if (initialOrderId) {
+      const matchId = initialOrderId.trim().toLowerCase();
+      const target =
+        allTasks.find(t => t.id.toLowerCase() === matchId || t.id.toLowerCase().startsWith(matchId)) ||
+        tasks.find(t => t.id.toLowerCase() === matchId || t.id.toLowerCase().startsWith(matchId));
+      if (target) {
+        setDetail(target);
+      }
+    }
+  }, [initialOrderId, allTasks, tasks]);
+
+  // فتح نافذة الشات تلقائياً عند النقر على إشعار رسالة
+  useEffect(() => {
+    if (initialChatOrderId) {
+      setChatOrderId(initialChatOrderId);
+    }
+  }, [initialChatOrderId]);
 
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window !== "undefined") {
@@ -2181,6 +2218,84 @@ export function Dashboard({ admin, search, onSearch, tab, onTab }: { admin: bool
               ))}
               {currentDetail.images.length > 0 && <p className="text-sm text-muted-foreground">صور مرفقة: {currentDetail.images.length}</p>}
               <p className="text-lg font-semibold">الإجمالي: {money(currentDetail.amount)}</p>
+              {currentDetail.kind === "orders" && currentDetail.status === "pending" && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">إجراء فوري لصاحب المتجر:</p>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <Button
+                      type="button"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 text-sm shadow-sm gap-2"
+                      disabled={busy}
+                      onClick={() => {
+                        execute(
+                          () =>
+                            doUpdate({
+                              data: {
+                                id: currentDetail.id,
+                                kind: currentDetail.kind,
+                                status: "accepted",
+                              },
+                            }),
+                          () => {},
+                        );
+                      }}
+                    >
+                      <Check className="size-4" />
+                      قبول وتأكيد الطلب
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="font-bold h-11 text-sm shadow-sm gap-2"
+                      disabled={busy}
+                      onClick={() => {
+                        if (window.confirm("هل أنت متأكد من رفض هذا الطلب وإلغائه؟")) {
+                          execute(
+                            () =>
+                              doUpdate({
+                                data: {
+                                  id: currentDetail.id,
+                                  kind: currentDetail.kind,
+                                  status: "cancelled",
+                                },
+                              }),
+                            () => {},
+                          );
+                        }
+                      }}
+                    >
+                      <X className="size-4" />
+                      رفض الطلب
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {currentDetail.kind === "orders" && currentDetail.status === "accepted" && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">تم قبول الطلب، الخطوة التالية:</p>
+                  <Button
+                    type="button"
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold h-11 text-sm shadow-sm gap-2"
+                    disabled={busy}
+                    onClick={() => {
+                      execute(
+                        () =>
+                          doUpdate({
+                            data: {
+                              id: currentDetail.id,
+                              kind: currentDetail.kind,
+                              status: "preparing",
+                            },
+                          }),
+                        () => {},
+                      );
+                    }}
+                  >
+                    <Package className="size-4" />
+                    بدء تحضير الطلب (إشعار كباتن التوصيل)
+                  </Button>
+                </div>
+              )}
               {currentDetail.kind === "orders" && currentDetail.status === "preparing" && (
                 <p className="rounded-md bg-primary/5 p-3 text-sm">الطلب جاهز وبانتظار استلام الدليفري</p>
               )}

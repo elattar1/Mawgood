@@ -104,13 +104,21 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
 
     const orderId = String(result.data);
     const shortId = orderId.slice(0, 8);
-    const storeName = store.data.name || 'المتجر';
-    const storeOwnerId = store.data.owner_id;
     const totalItemsCount = resolvedItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
+
+    // Fetch store record via admin client to ensure owner_id is never restricted by RLS
+    const dbStore = await supabaseAdmin
+      .from('stores')
+      .select('id, name, owner_id')
+      .eq('id', data.store_id)
+      .maybeSingle();
+
+    const storeName = dbStore.data?.name || store.data.name || 'المتجر';
+    const storeOwnerId = dbStore.data?.owner_id || store.data.owner_id;
 
     // 5. Send real-time in-app notification & Web Push to store owner (or admins)
     try {
-      const { sendPushToUser } = await import('@/lib/push.functions');
+      const { sendNotificationWithPush } = await import('@/lib/push.functions');
       const orderPayload = formatOrderPushPayload({
         orderId,
         storeName,
@@ -121,50 +129,37 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
       });
 
       if (storeOwnerId) {
-        // In-app notification for the store owner
-        await supabaseAdmin.from('notifications').insert({
-          user_id: storeOwnerId,
-          title: orderPayload.title,
-          body: orderPayload.body,
-          link: orderPayload.path,
-        });
-
-        // Web Push notification to store owner's mobile/desktop (shows even when locked/app closed)
-        await sendPushToUser(storeOwnerId, {
+        // Send both in-app notification and Web Push to store owner's mobile/desktop
+        await sendNotificationWithPush({
+          userId: storeOwnerId,
           title: orderPayload.title,
           body: orderPayload.body,
           path: orderPayload.path,
           tag: orderPayload.tag,
-          requireInteraction: orderPayload.requireInteraction,
         });
       } else {
         // Fallback for store without an assigned owner: notify platform administrators
         const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
         if (adminRoles.data && adminRoles.data.length > 0) {
           for (const admin of adminRoles.data) {
-            await supabaseAdmin.from('notifications').insert({
-              user_id: admin.user_id,
-              title: `🛍️ طلب جديد للمتجر (${storeName})`,
-              body: orderPayload.body,
-              link: `/admin?tab=orders&order=${orderId}`,
-            });
-            await sendPushToUser(admin.user_id, {
+            await sendNotificationWithPush({
+              userId: admin.user_id,
               title: `🛍️ طلب جديد للمتجر (${storeName})`,
               body: orderPayload.body,
               path: `/admin?tab=orders&order=${orderId}`,
               tag: orderPayload.tag,
-              requireInteraction: orderPayload.requireInteraction,
             });
           }
         }
       }
 
-      // Customer in-app order confirmation
-      await supabaseAdmin.from('notifications').insert({
-        user_id: context.userId,
+      // Customer in-app and push order confirmation
+      await sendNotificationWithPush({
+        userId: context.userId,
         title: `🛍️ تم تأكيد إرسال طلبك إلى ${storeName}`,
         body: `طلبك رقم #${shortId} قيد المراجعة لدى المتجر. سنوافيك بإشعار فور بدء التحضير.`,
-        link: `/orders?filter=active&chat=${orderId}`,
+        path: `/orders?filter=active&chat=${orderId}`,
+        tag: `husayniya-order-cust-${orderId}`,
       });
     } catch (notifErr) {
       console.error('Failed to dispatch order notification/push:', notifErr);
@@ -183,28 +178,24 @@ export const createBooking = createServerFn({ method: 'POST' })
     const result = await context.supabase.from('bookings').insert({ ...data, customer_id: context.userId }).select('id').single();
     if (result.error) throw new Error('تعذر الحجز؛ تأكد من التاريخ وحاول مرة أخرى');
 
-    if (store.data?.owner_id) {
-      try {
-        const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
-        const { sendPushToUser } = await import('@/lib/push.functions');
-        const docTitle = `🩺 حجز موعد جديد (${store.data.name || 'العيادة'})`;
+    try {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+      const { sendNotificationWithPush } = await import('@/lib/push.functions');
+      const dbStore = await supabaseAdmin.from('stores').select('id, name, owner_id').eq('id', data.store_id).maybeSingle();
+      const ownerId = dbStore.data?.owner_id || store.data?.owner_id;
+      if (ownerId) {
+        const docTitle = `🩺 حجز موعد جديد (${dbStore.data?.name || store.data.name || 'العيادة'})`;
         const docBody = `حجز جديد بتاريخ ${data.booking_date} الساعة ${data.booking_time} باسم المريض: ${data.patient_name} (${data.phone})`;
-        await supabaseAdmin.from('notifications').insert({
-          user_id: store.data.owner_id,
-          title: docTitle,
-          body: docBody,
-          link: '/provider?tab=bookings',
-        });
-        await sendPushToUser(store.data.owner_id, {
+        await sendNotificationWithPush({
+          userId: ownerId,
           title: docTitle,
           body: docBody,
           path: '/provider?tab=bookings',
           tag: `husayniya-booking-${result.data.id}`,
-          requireInteraction: true,
         });
-      } catch (err) {
-        console.error('Failed to dispatch booking push:', err);
       }
+    } catch (err) {
+      console.error('Failed to dispatch booking push:', err);
     }
 
     return result.data;
@@ -229,28 +220,24 @@ export const createServiceRequest = createServerFn({ method: 'POST' })
     }).select('id').single();
     if (result.error) throw new Error('تعذر إرسال طلب الخدمة');
 
-    if (store.data?.owner_id) {
-      try {
-        const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
-        const { sendPushToUser } = await import('@/lib/push.functions');
-        const srvTitle = `🔧 طلب صيانة جديد (${store.data.name || 'مقدم الخدمة'})`;
+    try {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+      const { sendNotificationWithPush } = await import('@/lib/push.functions');
+      const dbStore = await supabaseAdmin.from('stores').select('id, name, owner_id').eq('id', data.store_id).maybeSingle();
+      const ownerId = dbStore.data?.owner_id || store.data?.owner_id;
+      if (ownerId) {
+        const srvTitle = `🔧 طلب صيانة جديد (${dbStore.data?.name || store.data.name || 'مقدم الخدمة'})`;
         const srvBody = `طلب جديد من ${data.phone} - العنوان: ${data.address}`;
-        await supabaseAdmin.from('notifications').insert({
-          user_id: store.data.owner_id,
-          title: srvTitle,
-          body: srvBody,
-          link: '/provider?tab=services',
-        });
-        await sendPushToUser(store.data.owner_id, {
+        await sendNotificationWithPush({
+          userId: ownerId,
           title: srvTitle,
           body: srvBody,
           path: '/provider?tab=services',
           tag: `husayniya-service-${result.data.id}`,
-          requireInteraction: true,
         });
-      } catch (err) {
-        console.error('Failed to dispatch service push:', err);
       }
+    } catch (err) {
+      console.error('Failed to dispatch service push:', err);
     }
 
     return result.data;
@@ -388,11 +375,13 @@ export const submitOrderReview = createServerFn({ method: 'POST' })
 
     if (data.driverRating && orderRes.data.driver_id) {
       try {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: orderRes.data.driver_id,
+        const { sendNotificationWithPush } = await import('@/lib/push.functions');
+        await sendNotificationWithPush({
+          userId: orderRes.data.driver_id,
           title: `⭐ تقييم جديد لخدمة التوصيل (${data.driverRating}/5)`,
           body: data.driverComment || 'قيّم العميل خدمة التوصيل بنجاح. شكراً لجهودك!',
-          link: '/delivery?tab=wallet',
+          path: '/delivery?tab=wallet',
+          tag: `husayniya-driver-rate-${data.orderId}`,
         });
       } catch (err) {
         console.error('Driver review notification error:', err);
@@ -418,6 +407,7 @@ export const submitCustomerComplaint = createServerFn({ method: 'POST' })
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
 
     // 1. Try inserting directly into complaints_suggestions if table exists
+    let complaintSaved = false;
     try {
       const res = await supabaseAdmin.from('complaints_suggestions' as any).insert({
         user_id: context.userId,
@@ -430,14 +420,15 @@ export const submitCustomerComplaint = createServerFn({ method: 'POST' })
         status: 'pending',
       } as any);
       if (!res.error) {
-        return { success: true };
+        complaintSaved = true;
+      } else {
+        console.warn('complaints_suggestions insert returned error, using fallback:', res.error);
       }
-      console.warn('complaints_suggestions insert returned error, using fallback:', res.error);
     } catch (e) {
       console.warn('complaints_suggestions table not present, using fallback:', e);
     }
 
-    // 2. Fallback: Save ticket as admin notification
+    const { sendNotificationWithPush } = await import('@/lib/push.functions');
     const typeLabel = data.type === 'complaint' ? 'شكوى' : data.type === 'suggestion' ? 'اقتراح' : 'استفسار';
     const payload = JSON.stringify({
       id: crypto.randomUUID(),
@@ -454,21 +445,23 @@ export const submitCustomerComplaint = createServerFn({ method: 'POST' })
     const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
     if (adminRoles.data && adminRoles.data.length > 0) {
       for (const admin of adminRoles.data) {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: admin.user_id,
+        await sendNotificationWithPush({
+          userId: admin.user_id,
           title: `📩 [${typeLabel} جديدة]: ${data.title}`,
-          body: `من: ${data.customerName || 'عميل'} | هاتف: ${data.phone || 'غير مسجل'}\n${data.description}\n[TICKET_PAYLOAD:${payload}]`,
-          link: '/admin',
+          body: `من: ${data.customerName || 'عميل'} | هاتف: ${data.phone || 'غير مسجل'}\n${data.description}${complaintSaved ? '' : `\n[TICKET_PAYLOAD:${payload}]`}`,
+          path: '/admin',
+          tag: `husayniya-ticket-${Date.now()}`,
         });
       }
     }
 
     // Confirmation to customer
-    await supabaseAdmin.from('notifications').insert({
-      user_id: context.userId,
+    await sendNotificationWithPush({
+      userId: context.userId,
       title: 'تم استلام رسالتك بنجاح',
       body: `تم استلام ${typeLabel} بعنوان "${data.title}". سيقوم فريق الإدارة بمراجعتها والتواصل معك قريباً.`,
-      link: '/account',
+      path: '/account',
+      tag: `husayniya-ticket-cust-${Date.now()}`,
     });
 
     return { success: true };
@@ -488,6 +481,7 @@ export const submitDriverApplication = createServerFn({ method: 'POST' })
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
 
     // 1. Try inserting directly into driver_applications if table exists
+    let driverSaved = false;
     try {
       const res = await supabaseAdmin.from('driver_applications' as any).insert({
         user_id: context.userId,
@@ -498,14 +492,15 @@ export const submitDriverApplication = createServerFn({ method: 'POST' })
         status: 'pending',
       } as any);
       if (!res.error) {
-        return { success: true };
+        driverSaved = true;
+      } else {
+        console.warn('driver_applications insert returned error, using fallback:', res.error);
       }
-      console.warn('driver_applications insert returned error, using fallback:', res.error);
     } catch (e) {
       console.warn('driver_applications table not present, using fallback:', e);
     }
 
-    // 2. Fallback: Save application as admin notification
+    const { sendNotificationWithPush } = await import('@/lib/push.functions');
     const payload = JSON.stringify({
       id: crypto.randomUUID(),
       application_type: 'driver',
@@ -520,21 +515,23 @@ export const submitDriverApplication = createServerFn({ method: 'POST' })
     const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
     if (adminRoles.data && adminRoles.data.length > 0) {
       for (const admin of adminRoles.data) {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: admin.user_id,
+        await sendNotificationWithPush({
+          userId: admin.user_id,
           title: `🛵 [طلب انضمام دليفري جديد]: ${data.fullName}`,
-          body: `الاسم: ${data.fullName}\nالهاتف: ${data.phone}\nوسيلة التوصيل: ${data.vehicleType}${data.nationalId ? `\nالرقم القومي: ${data.nationalId}` : ''}\n[APPLICATION_PAYLOAD:${payload}]`,
-          link: '/drivers',
+          body: `الاسم: ${data.fullName}\nالهاتف: ${data.phone}\nوسيلة التوصيل: ${data.vehicleType}${data.nationalId ? `\nالرقم القومي: ${data.nationalId}` : ''}${driverSaved ? '' : `\n[APPLICATION_PAYLOAD:${payload}]`}`,
+          path: '/drivers',
+          tag: `husayniya-driver-app-${Date.now()}`,
         });
       }
     }
 
     // Confirmation to customer
-    await supabaseAdmin.from('notifications').insert({
-      user_id: context.userId,
+    await sendNotificationWithPush({
+      userId: context.userId,
       title: 'تم استلام طلب الانضمام لأسطول التوصيل',
       body: `شكراً لك يا ${data.fullName}! تم استلام طلبك للعمل كمندوب توصيل (${data.vehicleType}) بنجاح وسنتواصل معك هاتفياً قريباً.`,
-      link: '/account',
+      path: '/account',
+      tag: `husayniya-driver-app-cust-${Date.now()}`,
     });
 
     return { success: true };
@@ -555,6 +552,7 @@ export const submitMerchantApplication = createServerFn({ method: 'POST' })
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
 
     // 1. Try inserting directly into merchant_applications if table exists
+    let merchantSaved = false;
     try {
       const res = await supabaseAdmin.from('merchant_applications' as any).insert({
         user_id: context.userId,
@@ -566,14 +564,15 @@ export const submitMerchantApplication = createServerFn({ method: 'POST' })
         status: 'pending',
       } as any);
       if (!res.error) {
-        return { success: true };
+        merchantSaved = true;
+      } else {
+        console.warn('merchant_applications insert returned error, using fallback:', res.error);
       }
-      console.warn('merchant_applications insert returned error, using fallback:', res.error);
     } catch (e) {
       console.warn('merchant_applications table not present, using fallback:', e);
     }
 
-    // 2. Fallback: Save application as admin notification
+    const { sendNotificationWithPush } = await import('@/lib/push.functions');
     const payload = JSON.stringify({
       id: crypto.randomUUID(),
       application_type: 'merchant',
@@ -589,21 +588,23 @@ export const submitMerchantApplication = createServerFn({ method: 'POST' })
     const adminRoles = await supabaseAdmin.from('user_roles').select('user_id').eq('role', 'admin');
     if (adminRoles.data && adminRoles.data.length > 0) {
       for (const admin of adminRoles.data) {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: admin.user_id,
+        await sendNotificationWithPush({
+          userId: admin.user_id,
           title: `🏪 [طلب إضافة متجر جديد]: ${data.storeName}`,
-          body: `اسم النشاط: ${data.storeName}\nالقسم: ${data.category}\nالعنوان: ${data.address}\nالهاتف: ${data.phone}\nالتفاصيل: ${data.description}\n[APPLICATION_PAYLOAD:${payload}]`,
-          link: '/admin?tab=stores',
+          body: `اسم النشاط: ${data.storeName}\nالقسم: ${data.category}\nالعنوان: ${data.address}\nالهاتف: ${data.phone}\nالتفاصيل: ${data.description}${merchantSaved ? '' : `\n[APPLICATION_PAYLOAD:${payload}]`}`,
+          path: '/admin?tab=stores',
+          tag: `husayniya-merchant-app-${Date.now()}`,
         });
       }
     }
 
     // Confirmation to customer
-    await supabaseAdmin.from('notifications').insert({
-      user_id: context.userId,
+    await sendNotificationWithPush({
+      userId: context.userId,
       title: 'تم استلام طلب إضافة نشاطك التجاري',
       body: `تم تسجيل طلب إضافة "${data.storeName}" بنجاح! سيقوم فريق إدارة خدمات الحسينية بمراجعته والتواصل معك لتفعيله.`,
-      link: '/account',
+      path: '/account',
+      tag: `husayniya-merchant-app-cust-${Date.now()}`,
     });
 
     return { success: true };
@@ -780,14 +781,16 @@ export const adminReplyToTicket = createServerFn({ method: 'POST' })
         .eq('id', data.ticketId);
     } catch {}
 
-    // 3. Send notification to the user
+    // 3. Send notification & push to the user
     if (data.targetUserId) {
       try {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: data.targetUserId,
+        const { sendNotificationWithPush } = await import('@/lib/push.functions');
+        await sendNotificationWithPush({
+          userId: data.targetUserId,
           title: '💬 رد الإدارة على طلبك / شكواك',
           body: data.replyText,
-          link: '/account',
+          path: '/account',
+          tag: `husayniya-ticket-reply-${data.ticketId}`,
         });
       } catch (e) {
         console.error('Failed to notify customer of admin reply:', e);

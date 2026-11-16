@@ -6,7 +6,16 @@ import { pageMeta } from "@/lib/page-meta";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/provider")({
-  validateSearch: (s: SearchSchemaInput & { q?: unknown; tab?: unknown }) => ({ q: typeof s.q === "string" ? s.q : "", tab: ["stores", "products", "orders", "earnings"].includes(String(s.tab)) ? String(s.tab) : "stores" }),
+  validateSearch: (s: SearchSchemaInput & { q?: unknown; tab?: unknown; order?: unknown; chat?: unknown }) => ({
+    q: typeof s.q === "string" ? s.q : "",
+    tab: ["stores", "products", "orders", "earnings"].includes(String(s.tab))
+      ? String(s.tab)
+      : (s.order || s.chat)
+      ? "orders"
+      : "stores",
+    order: typeof s.order === "string" ? s.order : undefined,
+    chat: typeof s.chat === "string" ? s.chat : undefined,
+  }),
   loader: ({ context }) => context.queryClient.ensureQueryData({ ...dashboardQuery(false), revalidateIfStale: true }),
   head: () => pageMeta("لوحة مقدم الخدمة", "إدارة المتجر والمنتجات والطلبات والحجوزات ومستحقات مقدم الخدمة في خدمات الحسينية"),
   component: Provider,
@@ -16,7 +25,17 @@ export const Route = createFileRoute("/_authenticated/provider")({
 
 function Provider() {
   const search = Route.useSearch(), navigate = Route.useNavigate();
-  return <Dashboard admin={false} search={search.q} tab={search.tab} onSearch={q => navigate({ search: prev => ({ ...prev, q }), replace: true })} onTab={tab => navigate({ search: prev => ({ ...prev, tab }) })} />;
+  return (
+    <Dashboard
+      admin={false}
+      search={search.q}
+      tab={search.tab}
+      initialOrderId={search.order}
+      initialChatOrderId={search.chat}
+      onSearch={q => navigate({ search: prev => ({ ...prev, q }), replace: true })}
+      onTab={tab => navigate({ search: prev => ({ ...prev, tab }), replace: true })}
+    />
+  );
 }
 function DashboardError({ message }: { message: string }) {
   const router = useRouter();

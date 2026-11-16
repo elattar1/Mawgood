@@ -11,9 +11,15 @@ import { AdminBroadcastNotification } from "@/components/dashboard/AdminBroadcas
 import { useOffersVisibility } from "@/lib/use-offers-visibility";
 
 export const Route = createFileRoute("/_authenticated/admin")({
-  validateSearch: (s: SearchSchemaInput & { q?: unknown; tab?: unknown }) => ({
+  validateSearch: (s: SearchSchemaInput & { q?: unknown; tab?: unknown; order?: unknown; chat?: unknown }) => ({
     q: typeof s.q === "string" ? s.q : "",
-    tab: ["stores", "products", "orders", "earnings"].includes(String(s.tab)) ? String(s.tab) : "stores",
+    tab: ["stores", "products", "orders", "earnings"].includes(String(s.tab))
+      ? String(s.tab)
+      : (s.order || s.chat)
+      ? "orders"
+      : "stores",
+    order: typeof s.order === "string" ? s.order : undefined,
+    chat: typeof s.chat === "string" ? s.chat : undefined,
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData({ ...dashboardQuery(true), revalidateIfStale: true }),
   head: () => pageMeta("لوحة الإدارة", "اعتماد المتاجر وضبط العمولات ومراجعة الطلبات والأرباح في خدمات الحسينية"),
@@ -89,8 +95,10 @@ function Admin() {
         admin
         search={search.q}
         tab={search.tab}
+        initialOrderId={search.order}
+        initialChatOrderId={search.chat}
         onSearch={q => navigate({ search: prev => ({ ...prev, q }), replace: true })}
-        onTab={tab => navigate({ search: prev => ({ ...prev, tab }) })}
+        onTab={tab => navigate({ search: prev => ({ ...prev, tab }), replace: true })}
       />
 
       <AdminComplaints open={complaintsOpen} onOpenChange={setComplaintsOpen} />

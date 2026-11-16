@@ -82,20 +82,11 @@ export async function sendPushToUser(
                     body: payload.body,
                   },
                   webpush: {
-                    headers: {
-                      Urgency: 'high',
-                    },
                     notification: {
                       icon: '/icon-192.png',
                       badge: '/icon-192.png',
                       tag: payload.tag || 'husayniya-chat',
                       renotify: true,
-                      require_interaction: payload.requireInteraction ?? true,
-                      vibrate: [250, 100, 250, 100, 250],
-                      data: {
-                        path: payload.path || '/orders',
-                        link: payload.path || '/orders',
-                      },
                     },
                     fcm_options: {
                       link: payload.path || '/orders',
@@ -123,5 +114,41 @@ export async function sendPushToUser(
     );
   } catch (err) {
     console.error('sendPushToUser exception:', err);
+  }
+}
+
+/**
+ * دالة مركزية موحدة تضمن حفظ الإشعار الداخلي وإرسال إشعار خارجي (Push Notification) لهاتف المستخدم
+ */
+export async function sendNotificationWithPush(params: {
+  userId: string;
+  title: string;
+  body: string;
+  link?: string;
+  path?: string;
+  tag?: string;
+}): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+    const path = params.path || params.link || '/';
+    const link = params.link || params.path || '/';
+
+    // 1. إدراج الإشعار الداخلي في قاعدة البيانات
+    await supabaseAdmin.from('notifications').insert({
+      user_id: params.userId,
+      title: params.title,
+      body: params.body,
+      link: link,
+    });
+
+    // 2. إرسال الإشعار الفوري لهاتف المستخدم خارج الموقع
+    await sendPushToUser(params.userId, {
+      title: params.title,
+      body: params.body,
+      path: path,
+      tag: params.tag || `husayniya-notif-${Date.now()}`,
+    });
+  } catch (e) {
+    console.error('Failed in sendNotificationWithPush:', e);
   }
 }
