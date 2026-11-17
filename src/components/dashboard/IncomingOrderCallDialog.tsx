@@ -181,6 +181,21 @@ export function IncomingOrderCallDialog({
       aria-label="مكالمة طلب جديد وارد للمتجر"
       className="fixed inset-0 z-[99999] bg-slate-950/95 backdrop-blur-2xl text-white flex flex-col justify-between overflow-hidden p-4 sm:p-6 animate-in fade-in duration-300"
     >
+      {/* زر إغلاق نافذة المكالمة في الشمال من فوق للمتابعة والتعامل من الموقع */}
+      <button
+        type="button"
+        onClick={() => {
+          stopIncomingOrderCallRingtone();
+          onOpenChange(false);
+          toast.info("تم إغلاق شاشة المكالمة، يمكنك متابعة وقبول الطلب من الموقع.", { duration: 4000 });
+        }}
+        aria-label="إغلاق شاشة المكالمة والمتابعة من الموقع"
+        title="إغلاق نافذة المكالمة والمتابعة من الموقع"
+        className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 size-11 sm:size-12 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 text-slate-300 hover:text-white border border-white/20 flex items-center justify-center transition-all shadow-xl backdrop-blur-md group"
+      >
+        <X className="size-6 stroke-[2.5] group-hover:rotate-90 transition-transform duration-200" />
+      </button>
+
       {/* Top Header / Incoming Call Visual Banner */}
       <div className="flex flex-col items-center text-center pt-2 sm:pt-4 shrink-0">
         <div className="relative">

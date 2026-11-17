@@ -203,7 +203,8 @@ export function InAppChatNotifier() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const channel = supabase
+    // 1. القناة الفورية لجدول الإشعارات
+    const notifsChannel = supabase
       .channel(`in-app-notifs-${user.id}`)
       .on(
         'postgres_changes',
@@ -218,12 +219,38 @@ export function InAppChatNotifier() {
           qc.invalidateQueries({ queryKey: ["notifications"] });
           qc.invalidateQueries({ queryKey: ["unread"] });
           qc.invalidateQueries({ queryKey: ["customer-orders"] });
+          qc.invalidateQueries({ queryKey: ["dashboard"] });
+        }
+      )
+      .subscribe();
+
+    // 2. القناة الفورية للطلبات الجديدة في قاعدة البيانات مباشرة (سواء أُرسل الطلب من التطبيق أو الموقع)
+    const ordersChannel = supabase
+      .channel(`in-app-orders-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders',
+        },
+        (payload: any) => {
+          qc.invalidateQueries({ queryKey: ["dashboard"] });
+          qc.invalidateQueries({ queryKey: ["customer-orders"] });
+          qc.invalidateQueries({ queryKey: ["in-app-chat-notifications", user.id] });
+
+          const newOrder = payload?.new;
+          // إذا كان الطلب جديداً بحالة قيد الانتظار ولم يقم هذا المستخدم بطلبه (أي أنه صاحب المتجر أو الإدارة)
+          if (newOrder?.id && newOrder?.status === "pending" && newOrder.customer_id !== user.id) {
+            setIncomingCallOrderId(newOrder.id);
+          }
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(notifsChannel);
+      supabase.removeChannel(ordersChannel);
     };
   }, [user?.id, qc]);
 
@@ -304,13 +331,42 @@ export function InAppChatNotifier() {
         detectedStatus = "cancelled";
       }
 
-      const isStoreNewOrder = unread.title.includes("طلب جديد") || unread.link?.includes("/provider");
+      const isChat =
+        unread.title.includes("رسالة") ||
+        unread.body.includes("رسالة") ||
+        (unread.link && unread.link.includes("chat="));
+
+      const isStoreNewOrder =
+        (unread.title.includes("طلب جديد") ||
+         unread.body.includes("طلب جديد") ||
+         (unread.link && (unread.link.includes("order=") || unread.link.includes("/provider")))) &&
+        !isChat;
 
       if (isStoreNewOrder) {
         qc.invalidateQueries({ queryKey: ['dashboard'] });
         // فتح شاشة مكالمة الطلب الجديد فوراً على الشاشة كاملة مع الرنين المستمر
-        if (extractedOrderId) {
-          setIncomingCallOrderId(extractedOrderId);
+        let targetOrderId = extractedOrderId;
+        if (!targetOrderId) {
+          const uuidMatch = (unread.link || unread.body || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (uuidMatch) {
+            targetOrderId = uuidMatch[0];
+          }
+        }
+        if (targetOrderId) {
+          setIncomingCallOrderId(targetOrderId);
+        } else {
+          void supabase
+            .from('orders')
+            .select('id')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+            .then((res) => {
+              if (res.data?.id) {
+                setIncomingCallOrderId(res.data.id);
+              }
+            });
         }
       } else if (!playedSound) {
         if (isOrderStatus) {

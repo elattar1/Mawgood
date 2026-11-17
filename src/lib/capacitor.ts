@@ -104,11 +104,10 @@ export async function initCapacitorApp(): Promise<void> {
 
       PushNotifications.addListener('registration', async (token) => {
         try {
-          const { savePushDeviceToken } = await import('@/lib/push.functions');
-          await savePushDeviceToken({
+          const { registerPushDevice } = await import('@/lib/push.functions');
+          await registerPushDevice({
             data: {
               token: token.value,
-              userAgent: `Capacitor-Android/${Capacitor.getPlatform()}`,
             },
           });
         } catch (tokErr) {
