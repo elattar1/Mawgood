@@ -77,7 +77,7 @@ export const registerUserWithPhone = createServerFn({ method: "POST" })
     }
 
     const recoveryEmail = data.email?.trim().toLowerCase() || null;
-    const systemEmail = `${cleanPhone}@phone.husayniya.app`;
+    const systemEmail = `${cleanPhone}@phone.mawgood.store`;
 
     // 1. التحقق أولاً من عدم وجود مستخدم مسجل بنفس رقم التليفون في profiles
     try {
@@ -108,6 +108,7 @@ export const registerUserWithPhone = createServerFn({ method: "POST" })
       const phoneConflict = users.find(
         (u) =>
           u.email?.toLowerCase().trim() === systemEmail ||
+          u.email?.toLowerCase().trim() === `${cleanPhone}@phone.husayniya.app` ||
           u.user_metadata?.phone === cleanPhone ||
           u.phone === cleanPhone
       );
@@ -289,7 +290,7 @@ export const resolveLoginIdentifier = createServerFn({ method: "POST" })
       } catch (err) {
         console.warn("Could not check users list by phone:", err);
       }
-      return { authEmail: `${cleanPhone}@phone.husayniya.app` };
+      return { authEmail: `${cleanPhone}@phone.mawgood.store` };
     }
 
     // ج) إذا كان المدخل اسماً كاملاً: مطابقة دقيقة صارمة لمنع التخمين وحصاد الأسماء
@@ -311,7 +312,7 @@ export const resolveLoginIdentifier = createServerFn({ method: "POST" })
       console.warn("Error searching profiles by name:", e);
     }
 
-    return { authEmail: `${cleanPhone || raw}@phone.husayniya.app` };
+    return { authEmail: `${cleanPhone || raw}@phone.mawgood.store` };
   });
 
 /** طلب إعادة تعيين كلمة المرور عبر البريد الإلكتروني مع تقييد صارم لرابط إعادة التوجيه لمنع Open Redirect */
@@ -354,10 +355,12 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
 
     // تقييد رابط إعادة التوجيه ليكون دائماً نطاق التطبيق الرسمي منعاً لثغرات Open Redirect
     const TRUSTED_ORIGINS = [
+      "https://mawgood.store",
+      "https://www.mawgood.store",
       "https://husayniya.lovable.app",
       "https://husayniya.app",
     ];
-    let safeRedirect = "https://husayniya.lovable.app/auth";
+    let safeRedirect = "https://www.mawgood.store/auth";
     if (data.redirectUrl) {
       try {
         const parsed = new URL(data.redirectUrl);
@@ -401,7 +404,7 @@ export const sendDeletionVerificationCode = createServerFn({ method: "POST" })
     if (!user) throw new Error("تعذر تحديد المستخدم المسجل");
 
     let targetEmail = user.user_metadata?.recovery_email;
-    if (!targetEmail && user.email && !user.email.endsWith("@phone.husayniya.app")) {
+    if (!targetEmail && user.email && !user.email.endsWith("@phone.husayniya.app") && !user.email.endsWith("@phone.mawgood.store")) {
       targetEmail = user.email;
     }
 
@@ -549,7 +552,7 @@ export const reactivateAccount = createServerFn({ method: "POST" })
       await supabaseAdmin.from("notifications").insert({
         user_id: context.userId,
         title: "تم إعادة تنشيط حسابك بنجاح ✅",
-        body: "تم إلغاء طلب حذف الحساب بنجاح، ويمكنك الآن مواصلة استخدام خدمات الحسينية بشكل طبيعي.",
+        body: "تم إلغاء طلب حذف الحساب بنجاح، ويمكنك الآن مواصلة استخدام تطبيق موجود بشكل طبيعي.",
         is_read: false,
       });
     } catch (nErr) {
@@ -558,7 +561,7 @@ export const reactivateAccount = createServerFn({ method: "POST" })
 
     return {
       success: true,
-      message: "تم إلغاء طلب الحذف وإعادة تنشيط حسابك بنجاح! يسعدنا استمرارك معنا في خدمات الحسينية.",
+      message: "تم إلغاء طلب الحذف وإعادة تنشيط حسابك بنجاح! يسعدنا استمرارك معنا في تطبيق موجود.",
     };
   });
 
@@ -614,8 +617,8 @@ export const autoConfirmUser = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const cleanEmail = data.email.toLowerCase().trim();
 
-    // يُسمح بالتأكيد المباشر فقط لحسابات الهاتف النظامية (@phone.husayniya.app) أو عند تقديم كلمة المرور لتأكيد الهوية
-    const isSystemPhoneAccount = cleanEmail.endsWith("@phone.husayniya.app");
+    // يُسمح بالتأكيد المباشر فقط لحسابات الهاتف النظامية (@phone.husayniya.app أو @phone.mawgood.store) أو عند تقديم كلمة المرور لتأكيد الهوية
+    const isSystemPhoneAccount = cleanEmail.endsWith("@phone.husayniya.app") || cleanEmail.endsWith("@phone.mawgood.store");
     if (!isSystemPhoneAccount && (!data.password || data.password.length < 6)) {
       return { success: false, error: "عملية غير مصرح بها" };
     }

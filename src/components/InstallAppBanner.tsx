@@ -33,7 +33,7 @@ export function InstallAppBanner() {
     <div role="dialog" aria-label="تثبيت التطبيق" className="fixed inset-x-3 bottom-20 z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border bg-card p-3 shadow-soft md:bottom-4">
       <img src="/icon-192.png" alt="" className="size-11 shrink-0 rounded-lg" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">ثبّت تطبيق خدمات الحسينية</p>
+        <p className="text-sm font-semibold">ثبّت تطبيق موجود</p>
         <p className="text-xs text-muted-foreground">
           {ios ? <>اضغط <Share className="inline size-3.5" /> مشاركة ثم «إضافة إلى الشاشة الرئيسية»</> : 'افتحه من شاشة موبايلك بضغطة واحدة'}
         </p>

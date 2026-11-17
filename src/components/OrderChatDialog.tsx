@@ -412,7 +412,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                         ? `🛵 ${msg.sender_name || "كابتن التوصيل"}`
                         : msg.sender_role === "customer"
                         ? `👤 ${msg.sender_name || "العميل"}`
-                        : `🛡️ ${msg.sender_name || "خدمات الحسينية"}`;
+                        : `🛡️ ${msg.sender_name || "موجود"}`;
 
                     return (
                       <div key={msg.id} className="space-y-2">
@@ -740,7 +740,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                 </div>
               ) : (
                 <div className="rounded-2xl bg-card border border-border/60 p-3 text-center text-xs text-muted-foreground">
-                  طلب مخصص من خدمات الحسينية
+                  طلب مخصص من تطبيق موجود
                 </div>
               )}
             </div>

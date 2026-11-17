@@ -648,7 +648,7 @@ export const submitMerchantApplication = createServerFn({ method: 'POST' })
     await sendNotificationWithPush({
       userId: context.userId,
       title: 'تم استلام طلب إضافة نشاطك التجاري',
-      body: `تم تسجيل طلب إضافة "${data.storeName}" بنجاح! سيقوم فريق إدارة خدمات الحسينية بمراجعته والتواصل معك لتفعيله.`,
+      body: `تم تسجيل طلب إضافة "${data.storeName}" بنجاح! سيقوم فريق إدارة موجود بمراجعته والتواصل معك لتفعيله.`,
       path: '/account',
       tag: `husayniya-merchant-app-cust-${Date.now()}`,
     });

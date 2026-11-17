@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/delivery")({
     chat: typeof s["chat"] === "string" ? s["chat"] : undefined,
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(driverBoardQuery),
-  head: () => pageMeta("لوحة كابتن الدليفري", "الطلبات المتاحة والتوصيل الحالي وحساب أرباح كابتن خدمات الحسينية"),
+  head: () => pageMeta("لوحة كابتن الدليفري", "الطلبات المتاحة والتوصيل الحالي وحساب أرباح كابتن موجود"),
   component: Delivery,
   errorComponent: DeliveryError,
   notFoundComponent: () => <p className="p-8">الصفحة غير موجودة</p>,
@@ -122,7 +122,7 @@ function Delivery() {
   useEffect(() => {
     if (isWorking && data.available.length > prevAvailableCount.current) {
       playNewOrderAlert(soundEnabled);
-      toast.info("🚨 طلب توصيل جديد متاح في رادار خدمات الحسينية!");
+      toast.info("🚨 طلب توصيل جديد متاح في رادار موجود!");
     }
     prevAvailableCount.current = data.available.length;
   }, [data.available.length, soundEnabled, isWorking]);
@@ -179,7 +179,7 @@ function Delivery() {
               {isWorking ? "شغال ومتاح للتوصيل الآن" : "غير شغال (خارج الوردية حاليًا)"}
             </span>
           </div>
-          <PageTitle title={`أهلًا يا كابتن ${data.driver.full_name}`} sub="دليفري خدمات الحسينية" />
+          <PageTitle title={`أهلًا يا كابتن ${data.driver.full_name}`} sub="دليفري موجود" />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

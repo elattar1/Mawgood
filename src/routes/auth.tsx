@@ -38,7 +38,7 @@ export const Route = createFileRoute("/auth")({
   head: () =>
     pageMeta(
       "تسجيل الدخول",
-      "تسجيل الدخول وإدارة الطلبات والمتاجر في خدمات الحسينية بحساب Google أو البريد الإلكتروني أو رقم التليفون"
+      "تسجيل الدخول وإدارة الطلبات والمتاجر في تطبيق موجود بحساب Google أو البريد الإلكتروني أو رقم التليفون"
     ),
   component: Auth,
 });
@@ -369,13 +369,13 @@ function Auth() {
           <div className="mb-3 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
             <Store size={28} />
           </div>
-          <h1 className="text-2xl font-bold md:text-3xl">خدمات الحسينية</h1>
+          <h1 className="text-2xl font-bold md:text-3xl">موجود | Mawgood</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {user
               ? "مرحبًا بك، تم تسجيل دخولك بنجاح"
               : authMode === "forgot_password"
                 ? "إعادة تعيين كلمة المرور عبر البريد المسجل"
-                : "تسجيل الدخول وإدارة طلباتك ومتاجرك في الحسينية"}
+                : "تسجيل الدخول وإدارة طلباتك ومتاجرك بكل سهولة"}
           </p>
         </div>
 
@@ -771,7 +771,7 @@ function Auth() {
                 </div>
 
                 <p className="text-center text-[11px] text-muted-foreground leading-relaxed pt-1">
-                  بتسجيل الدخول، فإنك توافق على شروط الاستخدام وسياسة الخصوصية الخاصة بتطبيق خدمات الحسينية.
+                  بتسجيل الدخول، فإنك توافق على شروط الاستخدام وسياسة الخصوصية الخاصة بتطبيق موجود.
                 </p>
               </div>
             )}

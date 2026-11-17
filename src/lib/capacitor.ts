@@ -91,7 +91,7 @@ export async function initCapacitorApp(): Promise<void> {
       if (Capacitor.getPlatform() === 'android') {
         await PushNotifications.createChannel({
           id: 'orders_channel',
-          name: 'طلبات وتنبيهات خدمات الحسينية',
+          name: 'طلبات وتنبيهات موجود',
           description: 'تنبيهات فورية بحالات الطلبات ومحادثات المتاجر والدليفري',
           importance: 5,
           visibility: 1,

@@ -352,7 +352,7 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
       const pr = await supabaseAdmin.from("profiles").select("full_name").eq("id", context.userId).maybeSingle();
       senderName = pr.data?.full_name || "العميل";
     } else {
-      senderName = "إدارة خدمات الحسينية";
+      senderName = "إدارة موجود";
     }
 
     const newMessage: ChatMessage = {
@@ -507,7 +507,7 @@ export async function notifyOrderStatusUpdate(
         break;
       case "delivered":
         title = `🎉 تم تسليم طلبك بنجاح من ${storeName}`;
-        message = `تم تسليم الطلب وتحصيله بنجاح. شكراً لطلبك من ${storeName} عبر خدمات الحسينية! نرجو منك تقييم تجربتك ⭐`;
+        message = `تم تسليم الطلب وتحصيله بنجاح. شكراً لطلبك من ${storeName} عبر تطبيق موجود! نرجو منك تقييم تجربتك ⭐`;
         break;
       case "cancelled":
         if (cancelledBy === "customer") {
@@ -534,7 +534,7 @@ export async function notifyOrderStatusUpdate(
       order_id: orderId,
       sender_id: "system",
       sender_role: cancelledBy === "customer" && newStatus === "cancelled" ? "customer" : "admin",
-      sender_name: cancelledBy === "customer" && newStatus === "cancelled" ? "العميل" : "خدمات الحسينية (تحديث تلقائي)",
+      sender_name: cancelledBy === "customer" && newStatus === "cancelled" ? "العميل" : "موجود (تحديث تلقائي)",
       message,
       created_at: new Date().toISOString(),
       stage,

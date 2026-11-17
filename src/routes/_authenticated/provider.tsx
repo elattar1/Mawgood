@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/provider")({
     chat: typeof s.chat === "string" ? s.chat : undefined,
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData({ ...dashboardQuery(false), revalidateIfStale: true }),
-  head: () => pageMeta("لوحة مقدم الخدمة", "إدارة المتجر والمنتجات والطلبات والحجوزات ومستحقات مقدم الخدمة في خدمات الحسينية"),
+  head: () => pageMeta("لوحة مقدم الخدمة", "إدارة المتجر والمنتجات والطلبات والحجوزات ومستحقات مقدم الخدمة في تطبيق موجود"),
   component: Provider,
   errorComponent: ({ error }) => <DashboardError message={error instanceof Error ? error.message : "تعذر تحميل البيانات"} />,
   notFoundComponent: () => <p>المتجر غير موجود</p>,

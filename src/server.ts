@@ -96,7 +96,7 @@ export default {
               { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
             );
           }
-          systemEmail = `${cleanPhone}@phone.husayniya.app`;
+          systemEmail = `${cleanPhone}@phone.mawgood.store`;
         }
 
         // 1. Check if phone already registered in profiles
@@ -127,6 +127,7 @@ export default {
         const conflict = users.find(
           (u) =>
             u.email?.toLowerCase().trim() === systemEmail ||
+            u.email?.toLowerCase().trim() === `${cleanPhone}@phone.husayniya.app` ||
             (cleanPhone && (u.user_metadata?.phone === cleanPhone || u.phone === cleanPhone))
         );
 
@@ -156,7 +157,7 @@ export default {
             email_confirm: true,
             phone_confirm: true,
             user_metadata: {
-              full_name: fullName || "مستخدم خدمات الحسينية",
+              full_name: fullName || "مستخدم موجود",
               phone: cleanPhone,
               recovery_email: isEmail ? systemEmail : (email?.trim().toLowerCase() || null),
             },
@@ -169,7 +170,7 @@ export default {
             password: password.trim(),
             email_confirm: true,
             user_metadata: {
-              full_name: fullName || "مستخدم خدمات الحسينية",
+              full_name: fullName || "مستخدم موجود",
               phone: cleanPhone,
               recovery_email: isEmail ? systemEmail : (email?.trim().toLowerCase() || null),
             },
@@ -211,7 +212,7 @@ export default {
             await supabaseAdmin.from("profiles").upsert({
               id: newUser.user.id,
               phone: cleanPhone || null,
-              full_name: fullName || "مستخدم خدمات الحسينية",
+              full_name: fullName || "مستخدم موجود",
             });
           } catch (_) {}
         }

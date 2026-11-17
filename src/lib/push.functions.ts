@@ -21,7 +21,7 @@ export const sendTestPush = createServerFn({ method: 'POST' })
     const response = await fetch('https://connector-gateway.lovable.dev/firebase_messaging/v1/projects/_/messages:send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'X-Connection-Api-Key': connectionKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: { token: device.data.token, notification: { title: 'خدمات الحسينية', body: 'إشعار اختبار: إشعارات طلباتك جاهزة على هذا الجهاز.' }, data: { path: '/orders', test: 'true' }, webpush: { notification: { icon: '/icon-192.png', tag: 'husayniya-push-test' } } } }),
+      body: JSON.stringify({ message: { token: device.data.token, notification: { title: 'موجود', body: 'إشعار اختبار: إشعارات طلباتك جاهزة على هذا الجهاز.' }, data: { path: '/orders', test: 'true' }, webpush: { notification: { icon: '/icon-192.png', tag: 'husayniya-push-test' } } } }),
     });
     if (!response.ok) {
       const body = await response.text();

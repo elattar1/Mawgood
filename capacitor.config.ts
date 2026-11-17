@@ -2,11 +2,11 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.husayniya.services',
-  appName: 'خدمات الحسينية',
+  appName: 'موجود',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {
-    url: 'https://husayniya.lovable.app',
+    url: 'https://www.mawgood.store',
     androidScheme: 'https',
     cleartext: true,
   },

@@ -308,7 +308,7 @@ export function AdminBroadcastNotification({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-bold text-primary">خدمات الحسينية</p>
+                  <p className="text-[11px] font-bold text-primary">موجود</p>
                   <span className="text-[10px] text-muted-foreground">الآن</span>
                 </div>
                 <p className="text-xs font-bold text-foreground truncate mt-0.5">

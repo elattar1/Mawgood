@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2">
             <Link to="/" className="flex items-center gap-2">
               <img src="/icon-512.png" alt="" className="h-10 w-10 rounded-xl object-cover" />
-              <span className="font-display text-lg text-primary">خدمات الحسينية</span>
+              <span className="font-display text-lg text-primary font-bold">موجود</span>
             </Link>
 
             {modeBadge && (

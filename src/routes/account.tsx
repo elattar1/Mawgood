@@ -773,7 +773,7 @@ function AccountPage() {
           {/* خيار حذف الحساب نهائياً */}
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 shadow-soft space-y-2 text-center">
             <p className="text-xs text-muted-foreground">
-              هل ترغب في مغادرة خدمات الحسينية نهائياً؟
+              هل ترغب في مغادرة تطبيق موجود نهائياً؟
             </p>
             <Button
               variant="outline"
@@ -796,7 +796,7 @@ function AccountPage() {
             الشكاوى والاقتراحات
           </DialogTitle>
           <DialogDescription>
-            شاركنا بملاحظاتك أو مشكلتك وسيقوم فريق خدمات الحسينية بالرد عليك مباشرة
+            شاركنا بملاحظاتك أو مشكلتك وسيقوم فريق موجود بالرد عليك مباشرة
           </DialogDescription>
 
           {/* تبويبات: تقديم شكوى / الشكاوى السابقة */}

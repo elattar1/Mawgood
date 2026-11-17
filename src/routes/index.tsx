@@ -23,8 +23,8 @@ export const Route = createFileRoute('/')({
   loader: ({ context }) => context.queryClient.ensureQueryData({ ...catalogQuery, revalidateIfStale: true }),
   head: () =>
     pageMeta(
-      'المتاجر والخدمات في الحسينية',
-      'ابحث عن متاجر الحسينية والمطاعم والأطباء والخدمات المنزلية، واطلب وتابع طلبك من مكان واحد'
+      'موجود | Mawgood - كل متاجرك وخدماتك في مكان واحد',
+      'ابحث عن المتاجر والمطاعم والأطباء والخدمات، واطلب وتابع طلبك بسهولة من مكان واحد'
     ),
   component: Browse,
   errorComponent: CustomerError,
@@ -89,7 +89,7 @@ function Browse() {
             <MapPin size={16} className="text-white" /> الحسينية، الشرقية
           </p>
           <h1 className="text-3xl font-extrabold tracking-tight text-white drop-shadow-md md:text-5xl">
-            خدمات الحسينية
+            موجود | Mawgood
           </h1>
           <p className="mb-8 mt-3 text-lg text-white/90 drop-shadow-sm max-w-xl">
             متاجر بلدك وخدماتها، أقرب إليك.

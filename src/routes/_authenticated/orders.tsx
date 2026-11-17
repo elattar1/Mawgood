@@ -40,7 +40,7 @@ export const Route = createFileRoute('/_authenticated/orders')({
       context.queryClient.ensureQueryData({ ...catalogQuery, revalidateIfStale: true }),
     ]);
   },
-  head: () => pageMeta('طلباتي وحجوزاتي', 'متابعة الطلبات وحجوزات الأطباء والخدمات المنزلية في خدمات الحسينية'),
+  head: () => pageMeta('طلباتي وحجوزاتي', 'متابعة الطلبات وحجوزات الأطباء والخدمات المنزلية في تطبيق موجود'),
   component: Orders,
   errorComponent: CustomerError,
   notFoundComponent: CustomerNotFound,

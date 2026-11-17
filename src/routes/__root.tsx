@@ -69,14 +69,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "خدمات الحسينية" },
-      { name: "description", content: "كل خدمات مركز الحسينية - الشرقية في تطبيق واحد" },
+      { title: "موجود | Mawgood" },
+      { name: "description", content: "تطبيق موجود - كل احتياجاتك وطلباتك وخدماتك في مكان واحد" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "theme-color", content: "#045353" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-title", content: "خدمات الحسينية" },
+      { name: "apple-mobile-web-app-title", content: "موجود" },
       { name: "apple-mobile-web-app-status-bar-style", content: "default" },
     ],
     links: [

@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
     chat: typeof s.chat === "string" ? s.chat : undefined,
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData({ ...dashboardQuery(true), revalidateIfStale: true }),
-  head: () => pageMeta("لوحة الإدارة", "اعتماد المتاجر وضبط العمولات ومراجعة الطلبات والأرباح في خدمات الحسينية"),
+  head: () => pageMeta("لوحة الإدارة", "اعتماد المتاجر وضبط العمولات ومراجعة الطلبات والأرباح في تطبيق موجود"),
   component: Admin,
   errorComponent: ({ error }) => <AdminAccess message={error instanceof Error ? error.message : "تعذر تحميل البيانات"} />,
   notFoundComponent: () => <p>الصفحة غير موجودة</p>,

@@ -172,7 +172,7 @@ export function AccountDeletionInterceptModal() {
         </div>
 
         <p className="text-xs text-muted-foreground leading-relaxed text-center px-1">
-          إذا اخترت <strong>إعادة التنشيط</strong>، فسيتم إلغاء طلب الحذف فوراً والعودة لاستخدام خدمات الحسينية بكل بياناتك.
+          إذا اخترت <strong>إعادة التنشيط</strong>، فسيتم إلغاء طلب الحذف فوراً والعودة لاستخدام تطبيق موجود بكل بياناتك.
           أما إذا اخترت <strong>تسجيل الخروج</strong>، فسيستمر العد التنازلي لحذف الحساب نهائياً.
         </p>
 

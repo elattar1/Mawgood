@@ -9,7 +9,7 @@ import { readNotification } from '@/lib/customer.functions';
 import { pageMeta } from '@/lib/page-meta';
 import { dateAr } from '@/lib/labels';
 import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
-export const Route = createFileRoute('/_authenticated/notifications')({ loader: ({ context }) => context.queryClient.ensureQueryData(notificationsQuery), head: () => pageMeta('الإشعارات', 'آخر تحديثات طلباتك وحجوزاتك في خدمات الحسينية'), component: Notifications, errorComponent: CustomerError, notFoundComponent: CustomerNotFound });
+export const Route = createFileRoute('/_authenticated/notifications')({ loader: ({ context }) => context.queryClient.ensureQueryData(notificationsQuery), head: () => pageMeta('الإشعارات', 'آخر تحديثات طلباتك وحجوزاتك في تطبيق موجود'), component: Notifications, errorComponent: CustomerError, notFoundComponent: CustomerNotFound });
 function Notifications() {
   const { data } = useSuspenseQuery(notificationsQuery);
   const read = useServerFn(readNotification);

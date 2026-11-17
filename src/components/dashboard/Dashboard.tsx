@@ -520,7 +520,7 @@ export function Dashboard({
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b pb-4">
         <div className="min-w-0 max-w-full">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-            {admin ? <ShieldCheck size={16} className="text-purple-600" /> : <Store size={16} className="text-primary" />} خدمات الحسينية / {admin ? "لوحة الإدارة السحابية" : "بوابة التاجر والمحل"}
+            {admin ? <ShieldCheck size={16} className="text-purple-600" /> : <Store size={16} className="text-primary" />} موجود / {admin ? "لوحة الإدارة السحابية" : "بوابة التاجر والمحل"}
           </div>
           {!admin && data.stores.length > 1 ? (
             <div className="flex flex-wrap items-center gap-2 mt-1 min-w-0 max-w-full">
@@ -2396,7 +2396,7 @@ export function Dashboard({
             طلب حذف متجر «{store?.name}»
           </DialogTitle>
           <DialogDescription>
-            سيتم إرسال هذا الطلب لإدارة خدمات الحسينية للمراجعة والاعتماد. في حال الموافقة سيتم مسح المتجر وكافة المنتجات المرتبطة به نهائياً.
+            سيتم إرسال هذا الطلب لإدارة موجود للمراجعة والاعتماد. في حال الموافقة سيتم مسح المتجر وكافة المنتجات المرتبطة به نهائياً.
           </DialogDescription>
           <form
             onSubmit={e => {

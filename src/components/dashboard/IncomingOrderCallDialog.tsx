@@ -253,7 +253,7 @@ export function IncomingOrderCallDialog({
                   <p className="font-black text-sm sm:text-base text-white truncate">
                     {order.customer_name}
                   </p>
-                  <p className="text-xs text-slate-400">عميل خدمات الحسينية</p>
+                  <p className="text-xs text-slate-400">عميل موجود</p>
                 </div>
               </div>
 
