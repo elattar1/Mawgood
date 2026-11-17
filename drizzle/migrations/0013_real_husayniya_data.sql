@@ -1,8 +1,8 @@
 -- Migration: Real stores, sections, products and services for Markaz Al-Husayniya
 -- Clean up old demo stores
-DELETE FROM public.products WHERE store_id IN (SELECT id FROM public.stores WHERE name LIKE '%(تجريبي)%' OR id LIKE '11111111-%');
-DELETE FROM public.store_sections WHERE store_id IN (SELECT id FROM public.stores WHERE name LIKE '%(تجريبي)%' OR id LIKE '11111111-%');
-DELETE FROM public.stores WHERE name LIKE '%(تجريبي)%' OR id LIKE '11111111-%';
+DELETE FROM public.products WHERE store_id IN (SELECT id FROM public.stores WHERE name LIKE '%(تجريبي)%' OR id::text LIKE '11111111-%');
+DELETE FROM public.store_sections WHERE store_id IN (SELECT id FROM public.stores WHERE name LIKE '%(تجريبي)%' OR id::text LIKE '11111111-%');
+DELETE FROM public.stores WHERE name LIKE '%(تجريبي)%' OR id::text LIKE '11111111-%';
 
 -- Insert / Upsert Real Stores
 
