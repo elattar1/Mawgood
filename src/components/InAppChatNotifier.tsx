@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2, AlertCircle, Megaphone, Bell } from "lucide-react";
+import { MessageSquare, X, Store, Bike, BellRing, Check, CheckCircle2, AlertCircle, Megaphone, Bell, UtensilsCrossed, Volume2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth";
 import { getNotifications, readNotification } from "@/lib/customer.functions";
 import { registerPushDevice } from "@/lib/push.functions";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
+import { StoreOrderActionDialog } from "@/components/dashboard/StoreOrderActionDialog";
 import { Button } from "@/components/ui/button";
 import { playCustomerOrderAlert, getCustomerSoundEnabled, playNewOrderAlert } from "@/lib/order-alert";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +55,7 @@ interface NotificationBannerItem {
   title: string;
   body: string;
   isOrderStatus?: boolean;
+  isStoreNewOrder?: boolean;
   detectedStatus?: string;
   link?: string;
 }
@@ -68,6 +70,7 @@ export function InAppChatNotifier() {
 
   const [activeBanners, setActiveBanners] = useState<NotificationBannerItem[]>([]);
   const [openChatOrderId, setOpenChatOrderId] = useState<string | null>(null);
+  const [storeActionOrderId, setStoreActionOrderId] = useState<string | null>(null);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -323,16 +326,18 @@ export function InAppChatNotifier() {
         title: unread.title,
         body: unread.body,
         isOrderStatus,
+        isStoreNewOrder,
         detectedStatus,
         link: unread.link,
       };
 
       newBanners.push(bannerItem);
 
-      // Auto-dismiss each banner after exactly 3 seconds
+      // Auto-dismiss: normal banners 3s, store orders stay for 30s with kitchen alarm so merchant has ample time
+      const dismissDuration = isStoreNewOrder ? 30000 : 3000;
       const timer = setTimeout(() => {
         removeBanner(unread.id, false);
-      }, 3000);
+      }, dismissDuration);
       dismissTimersRef.current.set(unread.id, timer);
     }
 
@@ -350,6 +355,11 @@ export function InAppChatNotifier() {
 
   function handleBannerClick(banner: NotificationBannerItem) {
     removeBanner(banner.id, true);
+
+    if (banner.isStoreNewOrder && banner.orderId) {
+      setStoreActionOrderId(banner.orderId);
+      return;
+    }
 
     if (banner.link && banner.link.includes("/provider")) {
       navigate({ to: banner.link });
@@ -410,7 +420,7 @@ export function InAppChatNotifier() {
         </div>
       )}
 
-      {/* Stacked In-App Notification Banners: Auto-dismiss after 3s and stack beneath each other */}
+      {/* Stacked In-App Notification Banners: Auto-dismiss after 3s (or 30s for store orders) and stack beneath each other */}
       {activeBanners.length > 0 && (
         <div
           role="region"
@@ -424,16 +434,35 @@ export function InAppChatNotifier() {
               onClick={() => handleBannerClick(banner)}
               className="pointer-events-auto cursor-pointer select-none transition-all duration-300 animate-in fade-in slide-in-from-top-3"
             >
-              <div className="relative overflow-hidden rounded-2xl border-2 border-primary/40 bg-card/95 backdrop-blur-md p-3.5 shadow-2xl hover:border-primary transition-colors">
-                {/* 3-second countdown progress bar */}
+              <div
+                className={`relative overflow-hidden rounded-2xl border-2 ${
+                  banner.isStoreNewOrder
+                    ? "border-amber-500/80 bg-card/98 shadow-2xl ring-2 ring-amber-500/25"
+                    : "border-primary/40 bg-card/95 shadow-xl"
+                } backdrop-blur-md p-3.5 hover:border-primary transition-colors`}
+              >
+                {/* Countdown progress bar */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20">
-                  <div className="h-full bg-primary animate-[shrink_3s_linear_forwards]" />
+                  <div
+                    className="h-full bg-primary"
+                    style={{
+                      animation: `shrink ${banner.isStoreNewOrder ? "30s" : "3s"} linear forwards`,
+                    }}
+                  />
                 </div>
 
                 <div className="flex items-start justify-between gap-3 pt-1">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs">
-                      {banner.detectedStatus === "delivered" ? (
+                    <div
+                      className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
+                        banner.isStoreNewOrder
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-2 ring-amber-500/30"
+                          : "bg-primary/10 text-primary"
+                      }`}
+                    >
+                      {banner.isStoreNewOrder ? (
+                        <UtensilsCrossed className="size-5 animate-pulse" />
+                      ) : banner.detectedStatus === "delivered" ? (
                         <CheckCircle2 className="size-5 text-emerald-600" />
                       ) : banner.detectedStatus === "cancelled" || banner.title.includes("إلغاء") || banner.title.includes("اعتذار") ? (
                         <AlertCircle className="size-5 text-destructive" />
@@ -455,7 +484,13 @@ export function InAppChatNotifier() {
                         <span className="font-bold text-sm text-foreground truncate">
                           {banner.title}
                         </span>
-                        <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <span
+                          className={`inline-block size-2 rounded-full shrink-0 ${
+                            banner.isStoreNewOrder
+                              ? "bg-amber-500 animate-ping"
+                              : "bg-emerald-500 animate-pulse"
+                          }`}
+                        />
                       </div>
                       <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                         {banner.body}
@@ -472,6 +507,29 @@ export function InAppChatNotifier() {
                     <X className="size-4" />
                   </button>
                 </div>
+
+                {/* Direct quick action buttons for restaurant/merchant orders */}
+                {banner.isStoreNewOrder && banner.orderId && (
+                  <div className="mt-3 pt-2.5 border-t border-border/70 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 animate-pulse">
+                      <Volume2 className="size-3.5 shrink-0" />
+                      رنين إنذار المطبخ
+                    </span>
+                    <Button
+                      size="sm"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeBanner(banner.id, false);
+                        setStoreActionOrderId(banner.orderId);
+                      }}
+                      className="h-8 px-3.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm rounded-xl transition-transform active:scale-95"
+                    >
+                      <UtensilsCrossed className="size-3.5" />
+                      فتح الطلب (قبول / رفض)
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -483,6 +541,13 @@ export function InAppChatNotifier() {
         orderId={openChatOrderId}
         open={!!openChatOrderId}
         onOpenChange={(open) => !open && setOpenChatOrderId(null)}
+      />
+
+      {/* Global Store Order Action Dialog (View details, Accept or Reject) */}
+      <StoreOrderActionDialog
+        orderId={storeActionOrderId}
+        open={!!storeActionOrderId}
+        onOpenChange={(open) => !open && setStoreActionOrderId(null)}
       />
     </>
   );

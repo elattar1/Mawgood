@@ -662,29 +662,40 @@ export function Dashboard({
               كتم مؤقت (دقيقتين)
             </Button>
             {pendingTasks[0] && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  execute(
-                    () =>
-                      doUpdate({
-                        data: {
-                          id: pendingTasks[0].id,
-                          kind: pendingTasks[0].kind,
-                          status: "preparing",
-                        },
-                      }),
-                    () => {
-                      stopKitchenAlarm(pendingTasks[0].id);
-                      toast.success("تم قبول الطلب وبدء التحضير! تم إيقاف الإنذار.");
-                    }
-                  );
-                }}
-                className="bg-destructive text-white hover:bg-destructive/90 text-xs font-bold gap-1.5 h-9 shadow-sm"
-              >
-                <Check className="size-4" />
-                قبول أول طلب الآن
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDetail(pendingTasks[0])}
+                  className="border-destructive/40 bg-card text-destructive hover:bg-destructive/10 text-xs font-bold gap-1.5 h-9"
+                >
+                  <Eye className="size-3.5" />
+                  معاينة التفاصيل (قبول/رفض)
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    execute(
+                      () =>
+                        doUpdate({
+                          data: {
+                            id: pendingTasks[0].id,
+                            kind: pendingTasks[0].kind,
+                            status: "preparing",
+                          },
+                        }),
+                      () => {
+                        stopKitchenAlarm(pendingTasks[0].id);
+                        toast.success("تم قبول الطلب وبدء التحضير! تم إيقاف الإنذار.");
+                      }
+                    );
+                  }}
+                  className="bg-destructive text-white hover:bg-destructive/90 text-xs font-bold gap-1.5 h-9 shadow-sm"
+                >
+                  <Check className="size-4" />
+                  قبول أول طلب الآن
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -2351,6 +2362,68 @@ export function Dashboard({
               {currentDetail.kind === "orders" && currentDetail.status === "on_the_way" && (
                 <p className="rounded-md bg-primary/5 p-3 text-sm">الطلب مع الدليفري في الطريق للعميل</p>
               )}
+
+              {/* أزرار سريعة ومباشرة لقبول أو رفض الطلب للمطعم */}
+              {currentDetail.kind === "orders" && ["pending", "accepted"].includes(currentDetail.status) && (
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t">
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      execute(
+                        () =>
+                          doUpdate({
+                            data: {
+                              id: currentDetail.id,
+                              kind: "orders",
+                              status: "preparing",
+                            },
+                          }),
+                        () => {
+                          stopKitchenAlarm(currentDetail.id);
+                          toast.success("✅ تم قبول الطلب وبدء التحضير! تم إيقاف صفارة الإنذار.");
+                          setDetail(null);
+                        }
+                      );
+                    }}
+                    className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm gap-2 rounded-2xl shadow-md transition-transform active:scale-95"
+                  >
+                    <Check className="size-5 stroke-[2.5]" />
+                    قبول وبدء التحضير
+                  </Button>
+
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    variant="outline"
+                    onClick={() => {
+                      const reason = window.prompt("سبب رفض الطلب وإلغائه (اختياري، سيصل للعميل):", "الأصناف غير متوفرة حالياً");
+                      if (reason !== null) {
+                        execute(
+                          () =>
+                            doUpdate({
+                              data: {
+                                id: currentDetail.id,
+                                kind: "orders",
+                                status: "cancelled",
+                              },
+                            }),
+                          () => {
+                            stopKitchenAlarm(currentDetail.id);
+                            toast.info("❌ تم إلغاء الطلب واعتذار المتجر للعميل.");
+                            setDetail(null);
+                          }
+                        );
+                      }
+                    }}
+                    className="h-12 border-2 border-destructive/50 text-destructive hover:bg-destructive/10 font-black text-xs sm:text-sm gap-2 rounded-2xl transition-transform active:scale-95"
+                  >
+                    <X className="size-5 stroke-[2.5]" />
+                    رفض الطلب
+                  </Button>
+                </div>
+              )}
+
               {allowedNext(currentDetail.kind, currentDetail.status).length > 0 && (
                 <form
                   key={`${currentDetail.id}-${currentDetail.status}`}

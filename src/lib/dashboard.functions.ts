@@ -275,6 +275,45 @@ export const getDashboardOrderItems = createServerFn({ method: "POST" })
     return items.data ?? [];
   });
 
+export const getStoreOrderActionDetails = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(z.object({ orderId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const orderRes = await supabaseAdmin
+      .from("orders")
+      .select("id, status, total, subtotal, delivery_fee, address, phone, notes, created_at, store_id, stores(name, owner_id), order_items(name, qty, price)")
+      .eq("id", data.orderId)
+      .maybeSingle();
+
+    if (!orderRes.data) throw new Error("الطلب غير موجود");
+    const order = orderRes.data;
+
+    const [ownerCheck, adminCheck] = await Promise.all([
+      context.supabase.rpc("is_store_owner", { _store_id: order.store_id }),
+      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" }),
+    ]);
+
+    if (!ownerCheck.data && !adminCheck.data) {
+      throw new Error("لا تملك صلاحية عرض هذا الطلب");
+    }
+
+    return {
+      id: order.id,
+      status: order.status,
+      total: order.total,
+      subtotal: order.subtotal,
+      delivery_fee: order.delivery_fee,
+      address: order.address,
+      phone: order.phone,
+      notes: order.notes,
+      created_at: order.created_at,
+      store_id: order.store_id,
+      store_name: (order.stores as any)?.name ?? "المتجر",
+      items: (order.order_items as any[]) ?? [],
+    };
+  });
+
 export const saveStore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(storeInput)

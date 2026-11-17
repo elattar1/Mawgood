@@ -39,4 +39,22 @@ describe('Store Management and Deletion Rules', () => {
     expect(reviewStoreDeletionRequestInput.safeParse({ requestId: validUuid, action: 'reject', admin_notes: 'ملاحظة' }).success).toBe(true);
     expect(reviewStoreDeletionRequestInput.safeParse({ requestId: validUuid, action: 'pending' }).success).toBe(false);
   });
+
+  it('validates allowedNext transitions for store orders (pending allows direct acceptance or rejection)', async () => {
+    const { allowedNext } = await import('@/lib/dashboard-rules');
+    // Pending store orders can be accepted, started preparing, or cancelled
+    const pendingNext = allowedNext('orders', 'pending');
+    expect(pendingNext).toContain('accepted');
+    expect(pendingNext).toContain('preparing');
+    expect(pendingNext).toContain('cancelled');
+
+    // Accepted store orders can move to preparing or cancelled
+    const acceptedNext = allowedNext('orders', 'accepted');
+    expect(acceptedNext).toContain('preparing');
+    expect(acceptedNext).toContain('cancelled');
+
+    // Preparing orders stop at store level (delivery driver takes over)
+    const preparingNext = allowedNext('orders', 'preparing');
+    expect(preparingNext).toEqual([]);
+  });
 });
