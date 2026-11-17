@@ -1,30 +1,46 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { 
-  Send, 
-  Phone, 
-  Bike, 
-  Store, 
-  User, 
-  RefreshCw, 
-  MessageCircle, 
-  Clock, 
+import {
+  Send,
+  Phone,
+  Bike,
+  Store,
+  User,
+  RefreshCw,
+  MessageCircle,
+  Clock,
   CheckCheck,
   AlertCircle,
   Sparkles,
-  Shield,
-  ArrowRightLeft,
   Lock,
+  MapPin,
+  UtensilsCrossed,
+  Receipt,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getOrderChat, sendOrderChatMessage, type OrderChatInfo } from "@/lib/chat.functions";
-import { useOrderChatUnreadMap, recordChatSeen, clearActiveChatOrder, setActiveChatOrderId } from "@/lib/chat-unread";
+import {
+  useOrderChatUnreadMap,
+  recordChatSeen,
+  clearActiveChatOrder,
+  setActiveChatOrderId,
+} from "@/lib/chat-unread";
 import { useAuth } from "@/lib/auth";
 import { triggerSoftVibration } from "@/lib/order-alert";
+import { cleanDisplayAddress } from "@/lib/map-utils";
+import { cleanOrderNotes } from "@/lib/utils";
+import { STATUS_LABELS, money } from "@/lib/labels";
 
 interface OrderChatDialogProps {
   orderId: string | null;
@@ -87,6 +103,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
   const { markChatAsRead } = useOrderChatUnreadMap();
 
   const [inputMessage, setInputMessage] = useState("");
+  const [mobileTab, setMobileTab] = useState<"chat" | "details">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef<number>(0);
 
@@ -139,10 +156,10 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    if (open && data?.messages) {
+    if (open && data?.messages && mobileTab === "chat") {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [data?.messages?.length, open]);
+  }, [data?.messages?.length, open, mobileTab]);
 
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
@@ -184,339 +201,571 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
   // Determine active other party details
   let otherPartyTitle = "الطرف الآخر";
   let otherPartyPhone: string | null = null;
-  let stageDescription = "";
   let presets: string[] = [];
 
   if (isCustomer) {
     if (isDriverStage) {
       otherPartyTitle = data?.driver?.name || "كابتن التوصيل";
       otherPartyPhone = data?.driver?.phone || null;
-      stageDescription = "الطلب في الطريق إليك مع الكابتن 🛵";
       presets = CUSTOMER_TO_DRIVER_PRESETS;
     } else {
       otherPartyTitle = data?.store?.name || "المتجر / المطعم";
       otherPartyPhone = data?.store?.phone || null;
-      stageDescription = "جاري تجهيز وتأكيد طلبك داخل المتجر 🏪";
       presets = CUSTOMER_TO_STORE_PRESETS;
     }
   } else if (isStore) {
     otherPartyTitle = data?.customer?.name ? `العميل (${data.customer.name})` : "العميل";
     otherPartyPhone = data?.customer?.phone || null;
-    stageDescription = isDriverStage ? "تم تسليم الطلب للكابتن (المحادثة منتهية)" : "تواصل مباشر مع العميل أثناء تجهيز الطلب";
     presets = STORE_TO_CUSTOMER_PRESETS;
   } else if (isDriver) {
     otherPartyTitle = data?.customer?.name ? `العميل (${data.customer.name})` : "العميل";
     otherPartyPhone = data?.customer?.phone || null;
-    stageDescription = "توصيل الشحنة للعميل";
     presets = DRIVER_TO_CUSTOMER_PRESETS;
   } else {
     // Admin
     otherPartyTitle = isDriverStage ? (data?.driver?.name || "كابتن التوصيل") : (data?.store?.name || "المتجر");
-    stageDescription = "متابعة إدارة المنظومة";
     presets = ["مرحباً، للمساعدة بخصوص الطلب...", "تم التحقق من تفاصيل الطلب"];
   }
 
+  const shortId = orderId?.slice(0, 8);
+  const cleanAddress = data?.address ? cleanDisplayAddress(data.address) : "";
+  const cleanNotes = data?.notes ? cleanOrderNotes(data.notes) : "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-full p-0 gap-0 overflow-hidden rounded-2xl flex flex-col h-[85vh] sm:h-[620px]">
-        {/* Header */}
-        <DialogHeader className="p-4 border-b bg-card shrink-0 flex flex-row items-center justify-between text-right space-y-0">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+      <DialogContent className="max-w-4xl w-[95vw] p-0 gap-0 overflow-hidden rounded-2xl sm:rounded-3xl flex flex-col h-[90vh] max-h-[780px]">
+        {/* Header - Clean, sleek, without redundant verbose descriptions */}
+        <DialogHeader className="p-3.5 sm:p-4 border-b bg-card shrink-0 flex flex-row items-center justify-between text-right space-y-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="size-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
               {isCustomer ? (
                 isDriverStage ? <Bike className="size-5" /> : <Store className="size-5" />
               ) : (
                 <User className="size-5" />
               )}
             </div>
-            <div>
-              <DialogTitle className="text-base font-bold flex items-center gap-2">
-                {otherPartyTitle}
-                <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse" title="متصل الآن" />
+            <div className="min-w-0">
+              <DialogTitle className="text-sm sm:text-base font-black flex items-center gap-2 truncate">
+                <span className="truncate">{otherPartyTitle}</span>
+                <span
+                  className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse shrink-0"
+                  title="متصل الآن"
+                />
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                <span>طلب #{orderId?.slice(0, 8)}</span>
-                <span>•</span>
-                <span className="text-primary font-medium">{stageDescription}</span>
+                <span className="font-mono font-semibold">طلب #{shortId}</span>
+                {data?.status && (
+                  <>
+                    <span>•</span>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold ${
+                        data.status === "cancelled"
+                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                          : data.status === "delivered" || data.status === "completed"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                          : data.status === "on_the_way"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                          : "bg-primary/10 text-primary border border-primary/20"
+                      }`}
+                    >
+                      {STATUS_LABELS[data.status] || data.status}
+                    </span>
+                  </>
+                )}
               </DialogDescription>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 pl-10">
+          {/* Action buttons on header */}
+          <div className="flex items-center gap-1.5 pl-8 sm:pl-10">
             {otherPartyPhone && (
-              <Button asChild variant="outline" size="sm" className="h-8 gap-1 text-xs">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs font-bold rounded-xl"
+              >
                 <a href={`tel:${otherPartyPhone}`}>
                   <Phone className="size-3.5" />
-                  اتصال
+                  <span className="hidden sm:inline">اتصال</span>
                 </a>
               </Button>
             )}
+
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="size-8 rounded-xl"
               onClick={() => refetch()}
               disabled={isFetching}
-              title="تحديث الرسائل"
+              title="تحديث المحادثة"
             >
               <RefreshCw className={`size-3.5 ${isFetching ? "animate-spin text-primary" : ""}`} />
             </Button>
           </div>
         </DialogHeader>
 
-        {/* Content / Messages List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/20">
-          {isLoading && (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
-              <RefreshCw className="size-6 animate-spin text-primary" />
-              <p className="text-xs">جاري فتح المحادثة...</p>
-            </div>
-          )}
-
-          {isError && (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-4 text-center">
-              <AlertCircle className="size-8 text-destructive" />
-              <p className="text-sm font-semibold text-destructive">
-                {error instanceof Error ? error.message : "تعذر تحميل المحادثة"}
-              </p>
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
-                إعادة المحاولة
-              </Button>
-            </div>
-          )}
-
-          {!isLoading && !isError && data && (
-            <>
-              {/* Context info banner */}
-              {isCustomer && !isDriverStage && (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-foreground flex items-start gap-2 shadow-xs">
-                  <Store className="size-4 shrink-0 text-primary mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-primary">المحادثة الآن مباشرة مع {data.store?.name || "المتجر"}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      يتم تجهيز طلبك داخل المتجر. يمكنك الاستفسار أو طلب أي تعديل وسيرد عليك المتجر فوراً. عند انتهاء التحضير واستلام الكابتن للطلب، ستنتقل المحادثة تلقائياً لكابتن التوصيل 🛵.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Empty State for Driver (Clean fresh chat) */}
-              {isDriver && data.messages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center p-6 space-y-2">
-                  <div className="size-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                    <Bike className="size-6" />
-                  </div>
-                  <h4 className="font-bold text-foreground text-sm">محادثة جديدة مع العميل</h4>
-                  <p className="text-xs max-w-xs text-muted-foreground">
-                    أهلاً بك يا كابتن! يمكنك التنسيق هنا مباشرة مع العميل حول العنوان وتفاصيل الاستلام بدقة.
-                  </p>
-                </div>
-              )}
-
-              {/* General Empty State */}
-              {!isDriver && data.messages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center p-6 space-y-2">
-                  <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                    <MessageCircle className="size-6" />
-                  </div>
-                  <h4 className="font-bold text-foreground text-sm">محادثة فورية مباشرة</h4>
-                  <p className="text-xs max-w-xs text-muted-foreground">
-                    تواصل مباشرة مع {otherPartyTitle} لتنسيق ومتابعة تفاصيل الطلب لحظة بلحظة.
-                  </p>
-                </div>
-              )}
-
-              {/* Messages Bubble Stream */}
-              {data.messages.map((msg, idx) => {
-                const isMe = msg.sender_role === data.myRole;
-                const formattedTime = new Date(msg.created_at).toLocaleTimeString("ar-EG", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-
-                // Check if this message marks the transition to the driver phase for the customer
-                const isTransitionPoint =
-                  isCustomer &&
-                  msg.stage === "driver" &&
-                  (idx === 0 || data.messages[idx - 1]?.stage !== "driver");
-
-                // Display role badge
-                const roleBadge = 
-                  msg.sender_role === "store"
-                    ? `🏪 ${msg.sender_name || (data.store?.name ?? "المتجر")}`
-                    : msg.sender_role === "driver"
-                    ? `🛵 ${msg.sender_name || "كابتن التوصيل"}`
-                    : msg.sender_role === "customer"
-                    ? `👤 ${msg.sender_name || "العميل"}`
-                    : `🛡️ ${msg.sender_name || "خدمات الحسينية"}`;
-
-                return (
-                  <div key={msg.id} className="space-y-2">
-                    {/* Centered Transition Banner for Customer */}
-                    {isTransitionPoint && (
-                      <div className="my-4 flex items-center justify-center w-full">
-                        <div className="flex flex-col items-center text-center gap-1.5 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/10 p-3.5 shadow-xs max-w-sm">
-                          <div className="grid size-9 place-items-center rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                            <Bike className="size-5" />
-                          </div>
-                          <span className="font-bold text-xs text-emerald-800 dark:text-emerald-200">
-                            🛵 تم تحويل المحادثة الآن إلى كابتن التوصيل ({data.driver?.name || "الكابتن"})
-                          </span>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            المتجر أنهى التجهيز وسلّم الطلب للكابتن. يمكنك الآن التنسيق مباشرة مع الكابتن حول موقعك والتسليم.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={`flex flex-col ${isMe ? "items-start" : "items-end"} gap-1`}>
-                      <div className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
-                        <span className="font-medium">
-                          {isMe ? "أنت" : roleBadge}
-                        </span>
-                        <span>•</span>
-                        <span>{formattedTime}</span>
-                      </div>
-
-                      <div
-                        className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm shadow-sm break-words whitespace-pre-wrap leading-relaxed ${
-                          isMe
-                            ? "bg-primary text-primary-foreground rounded-tr-none"
-                            : msg.sender_id === "system"
-                            ? "bg-muted border border-primary/30 text-foreground text-center mx-auto"
-                            : "bg-card border text-foreground rounded-tl-none"
-                        }`}
-                      >
-                        {msg.message}
-                      </div>
-
-                      {isMe && (
-                        <div className="flex items-center gap-1 px-1 text-[10px]">
-                          {msg.is_read ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium transition-colors duration-200">
-                              <CheckCheck className="size-3.5 text-emerald-500 dark:text-emerald-400 stroke-[2.5]" />
-                              <span>تمت القراءة</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground/70">
-                              <CheckCheck className="size-3 text-muted-foreground/60 stroke-[1.8]" />
-                              <span>تم الإرسال</span>
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div ref={messagesEndRef} />
-            </>
-          )}
+        {/* Mobile View Tab Switcher (< md screens) */}
+        <div className="flex md:hidden bg-muted/60 p-1 border-b border-border/50 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileTab("chat")}
+            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "chat"
+                ? "bg-background text-foreground shadow-xs font-black"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <MessageCircle className="size-3.5" />
+            <span>المحادثة المباشرة</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("details")}
+            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "details"
+                ? "bg-background text-foreground shadow-xs font-black"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Receipt className="size-3.5" />
+            <span>تفاصيل الأوردر {data?.items?.length ? `(${data.items.length})` : ""}</span>
+          </button>
         </div>
 
-        {/* Footer: Locked if order completed/delivered OR if store was locked out after driver takeover */}
-        {data?.status === "delivered" || data?.status === "completed" || data?.status === "cancelled" ? (
-          <div className="p-4 border-t bg-muted/40 shrink-0 text-center space-y-1">
-            <div className="flex items-center justify-center gap-2 text-xs font-bold text-foreground">
-              <Lock className="size-4 text-primary" />
-              <span>تم اكتمال تسليم الطلب بنجاح وأُغلقت المحادثة تلقائياً</span>
+        {/* Main Body: Two Columns on Desktop (Chat on Right, Order Details on Left) */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 overflow-hidden">
+          {/* 1. RIGHT COLUMN: Chat Thread (الشات على اليمين) */}
+          <div
+            className={`md:col-span-7 flex flex-col min-h-0 border-l border-border/50 ${
+              mobileTab === "chat" ? "flex flex-1" : "hidden md:flex"
+            }`}
+          >
+            {/* Messages Scroll Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/15">
+              {isLoading && (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
+                  <RefreshCw className="size-6 animate-spin text-primary" />
+                  <p className="text-xs font-semibold">جاري تحميل المحادثة...</p>
+                </div>
+              )}
+
+              {isError && (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-4 text-center">
+                  <AlertCircle className="size-8 text-destructive" />
+                  <p className="text-sm font-semibold text-destructive">
+                    {error instanceof Error ? error.message : "تعذر تحميل المحادثة"}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => refetch()}>
+                    إعادة المحاولة
+                  </Button>
+                </div>
+              )}
+
+              {!isLoading && !isError && data && (
+                <>
+                  {/* Empty State for Driver */}
+                  {isDriver && data.messages.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center p-6 space-y-2">
+                      <div className="size-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                        <Bike className="size-6" />
+                      </div>
+                      <h4 className="font-bold text-foreground text-sm">محادثة جديدة مع العميل</h4>
+                      <p className="text-xs max-w-xs text-muted-foreground">
+                        أهلاً بك يا كابتن! يمكنك التنسيق هنا مباشرة مع العميل حول العنوان وتفاصيل الاستلام بدقة.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* General Empty State */}
+                  {!isDriver && data.messages.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center p-6 space-y-2">
+                      <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                        <MessageCircle className="size-6" />
+                      </div>
+                      <h4 className="font-bold text-foreground text-sm">محادثة فورية مباشرة</h4>
+                      <p className="text-xs max-w-xs text-muted-foreground">
+                        تواصل مباشرة مع {otherPartyTitle} لتنسيق ومتابعة تفاصيل الطلب لحظة بلحظة.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Messages Bubble Stream */}
+                  {data.messages.map((msg, idx) => {
+                    const isMe = msg.sender_role === data.myRole;
+                    const formattedTime = new Date(msg.created_at).toLocaleTimeString("ar-EG", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+
+                    // Check if this message marks the transition to the driver phase for the customer
+                    const isTransitionPoint =
+                      isCustomer &&
+                      msg.stage === "driver" &&
+                      (idx === 0 || data.messages[idx - 1]?.stage !== "driver");
+
+                    // Role display badge
+                    const roleBadge =
+                      msg.sender_role === "store"
+                        ? `🏪 ${msg.sender_name || (data.store?.name ?? "المتجر")}`
+                        : msg.sender_role === "driver"
+                        ? `🛵 ${msg.sender_name || "كابتن التوصيل"}`
+                        : msg.sender_role === "customer"
+                        ? `👤 ${msg.sender_name || "العميل"}`
+                        : `🛡️ ${msg.sender_name || "خدمات الحسينية"}`;
+
+                    return (
+                      <div key={msg.id} className="space-y-2">
+                        {/* Centered Transition Banner for Customer */}
+                        {isTransitionPoint && (
+                          <div className="my-3 flex items-center justify-center w-full">
+                            <div className="flex flex-col items-center text-center gap-1.5 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/10 p-3 shadow-xs max-w-sm">
+                              <div className="grid size-8 place-items-center rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                                <Bike className="size-4" />
+                              </div>
+                              <span className="font-bold text-xs text-emerald-800 dark:text-emerald-200">
+                                🛵 تم تحويل المحادثة الآن إلى كابتن التوصيل ({data.driver?.name || "الكابتن"})
+                              </span>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                المتجر أنهى التجهيز وسلّم الطلب للكابتن. يمكنك الآن التنسيق مباشرة مع الكابتن حول موقعك والتسليم.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className={`flex flex-col ${isMe ? "items-start" : "items-end"} gap-1`}>
+                          <div className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+                            <span className="font-medium">{isMe ? "أنت" : roleBadge}</span>
+                            <span>•</span>
+                            <span>{formattedTime}</span>
+                          </div>
+
+                          <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm break-words whitespace-pre-wrap leading-relaxed ${
+                              isMe
+                                ? "bg-primary text-primary-foreground rounded-tr-none"
+                                : msg.sender_id === "system"
+                                ? "bg-muted border border-primary/30 text-foreground text-center mx-auto"
+                                : "bg-card border text-foreground rounded-tl-none"
+                            }`}
+                          >
+                            {msg.message}
+                          </div>
+
+                          {isMe && (
+                            <div className="flex items-center gap-1 px-1 text-[10px]">
+                              {msg.is_read ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium transition-colors duration-200">
+                                  <CheckCheck className="size-3.5 text-emerald-500 dark:text-emerald-400 stroke-[2.5]" />
+                                  <span>تمت القراءة</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-muted-foreground/70">
+                                  <CheckCheck className="size-3 text-muted-foreground/60 stroke-[1.8]" />
+                                  <span>تم الإرسال</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div ref={messagesEndRef} />
+                </>
+              )}
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              سجل الرسائل محفوظ لديك للاطلاع عليه في أي وقت.
-            </p>
+
+            {/* Chat Footer: Locked if order completed/delivered/cancelled OR input form */}
+            {data?.status === "cancelled" ? (
+              <div className="p-3.5 border-t bg-rose-500/10 border-rose-500/20 shrink-0 text-center space-y-1">
+                <div className="flex items-center justify-center gap-2 text-xs font-bold text-rose-700 dark:text-rose-300">
+                  <AlertCircle className="size-4 text-rose-600 dark:text-rose-400" />
+                  <span>تم إلغاء هذا الطلب وأُغلقت المحادثة</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  سجل المحادثة وسبب الاعتذار محفوظ لديك للاطلاع عليه.
+                </p>
+              </div>
+            ) : data?.status === "delivered" || data?.status === "completed" ? (
+              <div className="p-3.5 border-t bg-muted/40 shrink-0 text-center space-y-1">
+                <div className="flex items-center justify-center gap-2 text-xs font-bold text-foreground">
+                  <Lock className="size-4 text-primary" />
+                  <span>تم اكتمال تسليم الطلب بنجاح وأُغلقت المحادثة</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  سجل الرسائل محفوظ لديك للاطلاع عليه في أي وقت.
+                </p>
+              </div>
+            ) : isStore && isDriverStage ? (
+              <div className="p-3.5 border-t bg-muted/40 shrink-0 text-center space-y-1">
+                <div className="flex items-center justify-center gap-2 text-xs font-bold text-foreground">
+                  <Lock className="size-4 text-primary" />
+                  <span>تم تسليم الطلب لكابتن التوصيل ({data?.driver?.name || "الكابتن"})</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  أُغلقت محادثة المتجر وانتقلت المحادثة الآن بين العميل وكابتن التوصيل لتنسيق الوصول.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Quick Presets */}
+                <div className="border-t bg-card/80 px-3 py-2 shrink-0">
+                  {isDriver ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                        <span className="flex items-center gap-1">
+                          <Bike className="size-3.5" />
+                          ردود سريعة بنقرة واحدة (للكابتن أثناء القيادة):
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-normal">إرسال فوري ⚡</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                        {presets.map((preset, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSend(preset)}
+                            disabled={sendMutation.isPending}
+                            className="text-xs whitespace-nowrap bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-800 dark:text-emerald-200 px-3 py-1.5 rounded-xl transition-all font-bold border border-emerald-500/30 shrink-0 shadow-2xs"
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                      <Sparkles className="size-3.5 text-primary shrink-0 ml-1" />
+                      {presets.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSend(preset)}
+                          disabled={sendMutation.isPending}
+                          className="text-xs whitespace-nowrap bg-muted hover:bg-muted/80 active:scale-95 text-foreground px-2.5 py-1 rounded-full transition-colors font-medium border border-border/50 shrink-0"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Input Bar */}
+                <div className="p-3 border-t bg-card shrink-0">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSend();
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Input
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      placeholder={
+                        isCustomer
+                          ? isDriverStage
+                            ? "اكتب رسالة لكابتن التوصيل..."
+                            : `اكتب رسالة لـ ${data?.store?.name || "المتجر"}...`
+                          : "اكتب رسالتك للعميل..."
+                      }
+                      className="flex-1 bg-muted/30 h-10 text-sm focus-visible:ring-primary"
+                      disabled={sendMutation.isPending}
+                      autoFocus
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      disabled={!inputMessage.trim() || sendMutation.isPending}
+                      className="size-10 shrink-0 bg-primary text-primary-foreground rounded-xl"
+                      title="إرسال"
+                    >
+                      <Send className={`size-4 ${sendMutation.isPending ? "animate-pulse" : ""}`} />
+                    </Button>
+                  </form>
+                </div>
+              </>
+            )}
           </div>
-        ) : isStore && isDriverStage ? (
-          <div className="p-4 border-t bg-muted/40 shrink-0 text-center space-y-1">
-            <div className="flex items-center justify-center gap-2 text-xs font-bold text-foreground">
-              <Lock className="size-4 text-primary" />
-              <span>تم تسليم الطلب لكابتن التوصيل ({data?.driver?.name || "الكابتن"})</span>
+
+          {/* 2. LEFT COLUMN: Order Details (تفاصيل الأوردر على الشمال) */}
+          <div
+            className={`md:col-span-5 flex flex-col min-h-0 overflow-y-auto bg-muted/20 p-4 space-y-3.5 ${
+              mobileTab === "details" ? "flex flex-1" : "hidden md:flex"
+            }`}
+          >
+            {/* Column Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <Receipt className="size-4 text-primary shrink-0" />
+                <h3 className="text-sm font-extrabold text-foreground">ملخص وتفاصيل الطلب</h3>
+              </div>
+              <span className="text-xs font-mono font-bold text-muted-foreground">#{shortId}</span>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              أُغلقت محادثة المتجر وانتقلت المحادثة الآن بين العميل وكابتن التوصيل لتنسيق الوصول.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Quick Suggestion Presets */}
-            <div className="border-t bg-card/80 px-3 py-2 shrink-0">
-              {isDriver ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-                    <span className="flex items-center gap-1">
-                      <Bike className="size-3.5" />
-                      ردود سريعة بنقرة واحدة (للكابتن أثناء القيادة):
+
+            {/* If Order is Cancelled: Highlight Cancellation Notice & Reason */}
+            {data?.status === "cancelled" && (
+              <div className="p-3.5 rounded-2xl bg-rose-500/15 border-2 border-rose-500/40 text-rose-900 dark:text-rose-100 space-y-1.5 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-black text-xs sm:text-sm">
+                  <AlertCircle className="size-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  <span>الطلب ملغي: سبب الاعتذار</span>
+                </div>
+                <p className="text-xs font-semibold leading-relaxed">
+                  {cleanNotes || "تم إلغاء الطلب من قِبل المتجر/الإدارة."}
+                </p>
+              </div>
+            )}
+
+            {/* Store Card */}
+            {data?.store && (
+              <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-2xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Store className="size-4 text-primary shrink-0" />
+                    <span className="font-bold text-xs sm:text-sm text-foreground truncate">
+                      {data.store.name}
                     </span>
-                    <span className="text-[10px] text-muted-foreground font-normal">إرسال فوري ⚡</span>
                   </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                    {presets.map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSend(preset)}
-                        disabled={sendMutation.isPending}
-                        className="text-xs whitespace-nowrap bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-800 dark:text-emerald-200 px-3 py-1.5 rounded-xl transition-all font-bold border border-emerald-500/30 shrink-0 shadow-2xs"
-                      >
-                        {preset}
-                      </button>
-                    ))}
+                  {data.store.phone && (
+                    <a
+                      href={`tel:${data.store.phone}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
+                    >
+                      <Phone className="size-3" />
+                      <span dir="ltr">{data.store.phone}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Customer Details Card */}
+            {data?.customer && (
+              <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-2xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <User className="size-4 text-primary shrink-0" />
+                    <span className="font-bold text-xs sm:text-sm text-foreground truncate">
+                      {data.customer.name || "العميل"}
+                    </span>
                   </div>
+                  {data.customer.phone && (
+                    <a
+                      href={`tel:${data.customer.phone}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors"
+                    >
+                      <Phone className="size-3" />
+                      <span dir="ltr">{data.customer.phone}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Driver Details Card (if assigned) */}
+            {data?.driver && (
+              <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-2xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Bike className="size-4 text-emerald-600 shrink-0" />
+                    <span className="font-bold text-xs sm:text-sm text-foreground truncate">
+                      {data.driver.name}
+                    </span>
+                  </div>
+                  {data.driver.phone && (
+                    <a
+                      href={`tel:${data.driver.phone}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors"
+                    >
+                      <Phone className="size-3" />
+                      <span dir="ltr">{data.driver.phone}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Delivery Address */}
+            {cleanAddress && (
+              <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-2xs flex items-start gap-2.5 text-xs">
+                <MapPin className="size-4 text-primary shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <span className="font-bold text-muted-foreground block text-[11px]">عنوان التوصيل:</span>
+                  <span className="font-semibold text-foreground leading-relaxed">
+                    {cleanAddress}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Customer Notes (when not cancelled) */}
+            {cleanNotes && data?.status !== "cancelled" && (
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-100 space-y-1 text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-300">
+                  <FileText className="size-3.5" />
+                  <span>ملاحظات على الطلب:</span>
+                </div>
+                <p className="leading-relaxed font-medium">{cleanNotes}</p>
+              </div>
+            )}
+
+            {/* Items List */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-bold px-1">
+                <span>الأصناف ({data?.items?.length || 0})</span>
+                <span>الكمية والسعر</span>
+              </div>
+
+              {data?.items && data.items.length > 0 ? (
+                <div className="divide-y divide-border/60 rounded-2xl bg-card border border-border/60 p-2.5 shadow-2xs">
+                  {data.items.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="py-2 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="size-5 rounded-md bg-primary/10 text-primary font-black text-[11px] grid place-items-center shrink-0">
+                          {item.qty}×
+                        </span>
+                        <span className="font-bold truncate text-foreground">{item.name}</span>
+                      </div>
+                      <span className="font-black text-foreground shrink-0 font-mono">
+                        {(item.price * item.qty).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                  <Sparkles className="size-3.5 text-primary shrink-0 ml-1" />
-                  {presets.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSend(preset)}
-                      disabled={sendMutation.isPending}
-                      className="text-xs whitespace-nowrap bg-muted hover:bg-muted/80 active:scale-95 text-foreground px-2.5 py-1 rounded-full transition-colors font-medium border border-border/50 shrink-0"
-                    >
-                      {preset}
-                    </button>
-                  ))}
+                <div className="rounded-2xl bg-card border border-border/60 p-3 text-center text-xs text-muted-foreground">
+                  طلب مخصص من خدمات الحسينية
                 </div>
               )}
             </div>
 
-            {/* Input Bar */}
-            <div className="p-3 border-t bg-card shrink-0">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSend();
-                }}
-                className="flex items-center gap-2"
-              >
-                <Input
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder={
-                    isCustomer
-                      ? isDriverStage
-                        ? "اكتب رسالة لكابتن التوصيل..."
-                        : `اكتب رسالة لـ ${data?.store?.name || "المتجر"}...`
-                      : "اكتب رسالتك للعميل..."
-                  }
-                  className="flex-1 bg-muted/30 h-10 text-sm focus-visible:ring-primary"
-                  disabled={sendMutation.isPending}
-                  autoFocus
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={!inputMessage.trim() || sendMutation.isPending}
-                  className="size-10 shrink-0 bg-primary text-primary-foreground rounded-xl"
-                  title="إرسال"
-                >
-                  <Send className={`size-4 ${sendMutation.isPending ? "animate-pulse" : ""}`} />
-                </Button>
-              </form>
+            {/* Financial Breakdown */}
+            <div className="rounded-2xl bg-card border border-border/60 p-3 text-xs space-y-1.5 shadow-2xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>المجموع الفرعي:</span>
+                <span className="font-mono font-semibold">
+                  {(data?.subtotal ?? (Number(data?.total || 0) - Number(data?.deliveryFee || 0))).toFixed(2)} ج.م
+                </span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>خدمة التوصيل:</span>
+                <span className="font-mono font-semibold">{(data?.deliveryFee ?? 0).toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-border/60 text-sm font-black text-foreground">
+                <span>الإجمالي الكلي:</span>
+                <span className="text-primary text-base font-black font-mono">
+                  {money(data?.total)}
+                </span>
+              </div>
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

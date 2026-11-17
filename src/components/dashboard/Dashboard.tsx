@@ -38,6 +38,7 @@ import {
   VolumeX,
   Bell,
   BellOff,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { registerPushDevice, sendTestPush } from "@/lib/push.functions";

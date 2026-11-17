@@ -39,6 +39,11 @@ export interface OrderChatInfo {
   };
   total: number;
   deliveryFee: number;
+  subtotal?: number;
+  address?: string | null;
+  notes?: string | null;
+  items?: Array<{ name: string; qty: number; price: number }>;
+  createdAt?: string | null;
   myRole: "customer" | "store" | "driver" | "admin";
   messages: ChatMessage[];
 }
@@ -81,7 +86,7 @@ export const getOrderChat = createServerFn({ method: "POST" })
 
     const orderRes = await supabaseAdmin
       .from("orders")
-      .select("id, customer_id, driver_id, store_id, status, phone, notes, total, delivery_fee, picked_up_at, stores(id, name, owner_id, phone, category)")
+      .select("id, customer_id, driver_id, store_id, status, phone, address, notes, total, subtotal, delivery_fee, picked_up_at, created_at, stores(id, name, owner_id, phone, category), order_items(name, qty, price)")
       .eq("id", data.orderId)
       .maybeSingle();
 
@@ -241,6 +246,8 @@ export const getOrderChat = createServerFn({ method: "POST" })
       visibleMessages = rawMessages;
     }
 
+    const { cleanNotes } = parseMessagesFromNotes(order.notes);
+
     return {
       orderId: order.id,
       status: order.status,
@@ -263,6 +270,17 @@ export const getOrderChat = createServerFn({ method: "POST" })
       },
       total: Number(order.total || 0),
       deliveryFee: Number(order.delivery_fee || 0),
+      subtotal: Number(order.subtotal ?? (Number(order.total || 0) - Number(order.delivery_fee || 0))),
+      address: (order as any).address ?? null,
+      notes: cleanNotes || null,
+      items: Array.isArray((order as any).order_items)
+        ? (order as any).order_items.map((it: any) => ({
+            name: it.name,
+            qty: Number(it.qty || 1),
+            price: Number(it.price || 0),
+          }))
+        : [],
+      createdAt: order.created_at ?? null,
       myRole,
       messages: visibleMessages,
     };

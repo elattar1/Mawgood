@@ -459,8 +459,19 @@ function Orders() {
                   </Button>
                 )}
 
-                {r.kind === 'orders' && r.status !== 'cancelled' && (
-                  r.status === 'delivered' || r.status === 'completed' ? (
+                {r.kind === 'orders' && (
+                  r.status === 'cancelled' ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="relative gap-1.5 text-xs font-bold border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => setChatOrderId(r.id)}
+                    >
+                      <ChatUnreadBadge count={getUnreadCount(r.id)} />
+                      <MessageCircle className="size-3.5" />
+                      المحادثة وسبب الإلغاء 💬
+                    </Button>
+                  ) : (r.status === 'delivered' || r.status === 'completed') ? (
                     <Button
                       size="sm"
                       variant="ghost"

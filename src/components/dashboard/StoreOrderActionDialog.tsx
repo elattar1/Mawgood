@@ -88,6 +88,7 @@ export function StoreOrderActionDialog({
       qc.invalidateQueries({ queryKey: ["store-order-action-details", id] });
       qc.invalidateQueries({ queryKey: ["customer-orders"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast.error("⚠️ تنبيه: التوصيل وتسليم الطلب يتمان من خلال الدليفري فقط", { duration: 8000 });
       toast.success("✅ تم قبول الطلب وبدء التحضير! تم إيقاف صفارة الإنذار.");
       onActionComplete?.();
       onOpenChange(false);
@@ -105,6 +106,7 @@ export function StoreOrderActionDialog({
           kind: "orders",
           id,
           status: "cancelled",
+          note,
         },
       });
     },

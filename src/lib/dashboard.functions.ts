@@ -687,6 +687,7 @@ export const updateRequest = createServerFn({ method: "POST" })
       id: z.string().uuid(),
       status: z.string(),
       quoted_price: z.number().min(0).optional(),
+      note: z.string().trim().max(500).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -743,6 +744,7 @@ export const updateRequest = createServerFn({ method: "POST" })
         const { notifyOrderStatusUpdate } = await import("@/lib/chat.functions");
         await notifyOrderStatusUpdate(data.id, data.status, {
           cancelledBy: data.status === "cancelled" ? (admin.data ? "admin" : "store") : undefined,
+          note: data.note,
         });
       } catch (e) {
         console.error("notifyOrderStatusUpdate failed:", e);
