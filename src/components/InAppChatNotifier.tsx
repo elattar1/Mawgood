@@ -10,6 +10,12 @@ import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { Button } from "@/components/ui/button";
 import { playCustomerOrderAlert, getCustomerSoundEnabled, playNewOrderAlert } from "@/lib/order-alert";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getPersistedSeenNotificationIds,
+  persistSeenNotificationIds,
+  syncSeenNotificationIdsFromStorage,
+  SEEN_BANNERS_STORAGE_KEY_PREFIX,
+} from "@/lib/notification-seen";
 
 function playMessageChime() {
   try {
@@ -66,6 +72,38 @@ export function InAppChatNotifier() {
   const [pushBusy, setPushBusy] = useState(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const dismissTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const isInitialLoadRef = useRef(true);
+
+  // Load persisted seen IDs when user changes or component mounts
+  useEffect(() => {
+    if (!user?.id) {
+      seenNotificationIdsRef.current = new Set();
+      isInitialLoadRef.current = true;
+      return;
+    }
+    const persisted = getPersistedSeenNotificationIds(user.id);
+    seenNotificationIdsRef.current = new Set(persisted);
+    isInitialLoadRef.current = true;
+  }, [user?.id]);
+
+  // Sync seen notifications across multiple open tabs in real-time
+  useEffect(() => {
+    if (!user?.id || typeof window === "undefined") return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `${SEEN_BANNERS_STORAGE_KEY_PREFIX}${user.id}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((id: string) => seenNotificationIdsRef.current.add(id));
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [user?.id]);
 
   // Cleanup auto-dismiss timers on unmount
   useEffect(() => {
@@ -188,6 +226,26 @@ export function InAppChatNotifier() {
   useEffect(() => {
     if (!notifications || !Array.isArray(notifications) || !user) return;
 
+    // Synchronize latest seen IDs from storage (handles cross-tab actions)
+    syncSeenNotificationIdsFromStorage(user.id, seenNotificationIdsRef.current);
+
+    // On cold start / initial page load after restart:
+    // Mark all existing unread notifications as seen so they never flood the screen on reload
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      let hasNewSeen = false;
+      for (const n of notifications) {
+        if (!seenNotificationIdsRef.current.has(n.id)) {
+          seenNotificationIdsRef.current.add(n.id);
+          hasNewSeen = true;
+        }
+      }
+      if (hasNewSeen) {
+        persistSeenNotificationIds(user.id, seenNotificationIdsRef.current);
+      }
+      return;
+    }
+
     // Filter all new unread notifications that have not been seen
     const unreadList = notifications.filter(
       (n: any) => !n.is_read && !seenNotificationIdsRef.current.has(n.id)
@@ -277,6 +335,9 @@ export function InAppChatNotifier() {
       }, 3000);
       dismissTimersRef.current.set(unread.id, timer);
     }
+
+    // Persist seen IDs immediately so they never reappear even on immediate page refresh
+    persistSeenNotificationIds(user.id, seenNotificationIdsRef.current);
 
     if (newBanners.length > 0) {
       setActiveBanners((prev) => {
