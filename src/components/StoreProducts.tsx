@@ -33,94 +33,101 @@ export function StoreProducts({
   const [activeSectionId, setActiveSectionId] = useState<string>("all");
   const navRef = useRef<HTMLDivElement>(null);
 
+  // تحديث الفئة دون أي قفز أو تمرير في الصفحة إطلاقاً
   const handleSelectSection = (sectionId: string) => {
     setActiveSectionId(sectionId);
-    if (sectionId === "all") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      const element = document.getElementById(`product-section-${sectionId}`);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }
   };
+
+  // فلترة المنتجات حسب الفئة المحددة (أو عرض الكل عند اختيار "الكل")
+  const displayedGroups =
+    activeSectionId === "all"
+      ? groups
+      : groups.filter((g) => g.id === activeSectionId);
 
   return (
     <div>
-      {/* رأس قائمة الطعام */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2 text-foreground">
-            <UtensilsCrossed className="size-5 text-primary" />
-            قائمة المنتجات والأصناف
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            إجمالي الأصناف: <strong className="text-foreground">{products.length}</strong> • رسوم التوصيل المقررة: <strong className="text-primary">{money(store.delivery_fee)}</strong>
-          </p>
-        </div>
-      </div>
-
-      {/* شريط الفئات العرضي الأفقي القابل للتمرير في أول المنيو */}
+      {/* شريط الفئات والأقسام المطور - بارز ومصمم مثل فئات الخدمات في الصفحة الرئيسية */}
       {groups.length > 0 && (
-        <div className="sticky top-14 z-30 mb-7 border bg-card/95 px-3 py-2.5 backdrop-blur-md shadow-xs rounded-2xl">
-          <nav
+        <div className="mb-6 rounded-2xl border bg-card p-3.5 sm:p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
+              <Layers className="size-4 text-primary" />
+              أقسام ومنيو المتجر ({groups.length + 1})
+            </span>
+            {activeSectionId !== "all" && (
+              <button
+                type="button"
+                onClick={() => handleSelectSection("all")}
+                className="text-xs text-primary font-bold hover:underline"
+              >
+                عرض كل الأصناف
+              </button>
+            )}
+          </div>
+          <div
             ref={navRef}
-            aria-label="فئات المنيو"
-            className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth"
+            role="tablist"
+            aria-label="أقسام ومنيو المتجر"
+            className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth pb-1"
           >
             {/* زر عرض الكل */}
-            <button
+            <Button
               type="button"
+              variant={activeSectionId === "all" ? "default" : "outline"}
+              size="sm"
               onClick={() => handleSelectSection("all")}
-              className={`shrink-0 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition-all ${
-                activeSectionId === "all"
-                  ? "bg-primary text-primary-foreground shadow-sm scale-105"
-                  : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40"
-              }`}
+              className="shrink-0 gap-1.5 font-bold rounded-xl h-9 text-xs transition-all shadow-xs"
             >
               <Layers className="size-3.5" />
               <span>الكل</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                activeSectionId === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background text-muted-foreground"
-              }`}>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  activeSectionId === "all"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
                 {products.length}
               </span>
-            </button>
+            </Button>
 
-            {/* أزرار الفئات المخصصة في شريط العرض */}
+            {/* أزرار أقسام المتجر */}
             {groups.map((group) => {
               const isActive = activeSectionId === group.id;
               return (
-                <button
+                <Button
                   key={group.id}
                   type="button"
+                  variant={isActive ? "default" : "outline"}
+                  size="sm"
                   onClick={() => handleSelectSection(group.id)}
-                  className={`shrink-0 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                    isActive
-                      ? "bg-primary text-primary-foreground font-bold shadow-sm scale-105"
-                      : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40"
-                  }`}
+                  className="shrink-0 gap-1.5 font-bold rounded-xl h-9 text-xs transition-all shadow-xs"
                 >
+                  <UtensilsCrossed className="size-3.5" />
                   <span>{group.name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background text-muted-foreground"
-                  }`}>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                      isActive
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
                     {group.products.length}
                   </span>
-                </button>
+                </Button>
               );
             })}
-          </nav>
+          </div>
         </div>
       )}
 
-      {/* المنتجات مجمعة تحت كل فئة خاصة بها */}
-      <div className="space-y-10">
-        {groups.map((group) => (
+      {/* المنتجات المعروضة بناءً على الفئة المختارة */}
+      <div className="space-y-8">
+        {displayedGroups.map((group) => (
           <section
             key={group.id}
             id={`product-section-${group.id}`}
-            className="scroll-mt-32 space-y-4"
+            className="space-y-4"
           >
             {/* عنوان الفئة وعدد منتجاتها */}
             <div className="flex items-center justify-between border-b pb-2.5">
@@ -140,7 +147,7 @@ export function StoreProducts({
                 const qty = itemInCart?.qty ?? 0;
                 return (
                   <article
-                    className="flex min-w-0 items-center gap-4 rounded-2xl border bg-card p-4 shadow-soft transition-all hover:border-primary/40"
+                    className="flex min-w-0 items-center gap-4 rounded-2xl border bg-card p-4 shadow-soft transition-all hover:border-primary/40 hover:shadow-hover"
                     key={product.id}
                   >
                     {product.image_url && (

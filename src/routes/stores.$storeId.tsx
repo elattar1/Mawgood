@@ -26,6 +26,7 @@ import { createBooking, createServiceRequest } from '@/lib/customer.functions';
 import { compressImageToWebP } from '@/lib/image-compress';
 import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOTS, CATEGORY_ICONS, money } from '@/lib/labels';
+import { isStoreCurrentlyOpen, cleanStoreDescription } from '@/lib/store-hours';
 import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
 
 export const Route = createFileRoute('/stores/$storeId')({
@@ -83,6 +84,9 @@ function StorePage() {
   const doctor = store.category === 'doctors';
   const service = ['maintenance', 'home'].includes(store.category);
   const products = details.products.filter((p) => p.store_id === storeId);
+  const categoryName = data.categories.find((c) => c.slug === store.category)?.name || "متجر";
+  const areaName = data.areas.find((a) => a.id === store.area_id)?.name || "";
+  const cleanDesc = cleanStoreDescription(store.description);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -137,67 +141,153 @@ function StorePage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-7">
-      <Link to="/" className="mb-6 inline-flex items-center gap-2 text-sm text-primary">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+      {/* رابط العودة للمتاجر */}
+      <Link to="/" className="mb-4 inline-flex items-center gap-2 text-sm text-primary font-medium hover:underline">
         <ArrowRight size={16} />
         المتاجر والخدمات
       </Link>
 
-      {store.banner_url && (
-        <img
-          src={store.banner_url}
-          alt={`بانر ${store.name}`}
-          className="mb-5 h-40 w-full rounded-xl object-cover md:h-56"
-        />
-      )}
+      {/* 1. صورة الكفر مع الشارات العلوية */}
+      <div className="relative mb-4 h-48 sm:h-60 md:h-72 w-full overflow-hidden rounded-2xl md:rounded-3xl border bg-muted shadow-soft">
+        {store.banner_url || store.logo_url ? (
+          <img
+            src={store.banner_url || store.logo_url}
+            alt={`بانر ${store.name}`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-primary/15 via-muted to-card flex items-center justify-center">
+            <span className="text-6xl opacity-20">{CATEGORY_ICONS[store.category] || "🏪"}</span>
+          </div>
+        )}
 
-      <header className="mb-8 flex flex-wrap items-start gap-5 border-b pb-7">
+        {/* تدرج فيد علوي لضمان وضوح الشارات تماماً */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/25 pointer-events-none" />
+
+        {/* الشارات العلوية فوق صورة الكفر */}
+        <div className="absolute inset-x-3.5 top-3.5 flex items-center justify-between gap-2 z-10">
+          {/* نوع النشاط من فوق علي اليمين */}
+          <span className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md border border-white/10 shadow-sm">
+            <span>{CATEGORY_ICONS[store.category]}</span>
+            <span>{categoryName}</span>
+          </span>
+
+          {/* مفتوح او مغلق من فوق علي الشمال زي كارت المتجر من برا */}
+          {(() => {
+            const hours = isStoreCurrentlyOpen(store);
+            return (
+              <span
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold backdrop-blur-md shadow-sm border ${
+                  hours.isOpen
+                    ? "bg-emerald-600/95 text-white border-emerald-400/40"
+                    : "bg-black/75 text-rose-200 border-rose-500/40"
+                }`}
+                title={hours.reason || hours.formattedHours}
+              >
+                <span
+                  className={`size-2 rounded-full ${
+                    hours.isOpen ? "bg-emerald-300 animate-pulse" : "bg-rose-400"
+                  }`}
+                />
+                <span>{hours.isOpen ? "مفتوح الآن" : "مغلق حاليًا"}</span>
+              </span>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* 2. الاسم تحت صورة الكفر على طول وجمب صورة المتجر ونوع المتجر حالياً */}
+      <div className="mb-4 flex flex-wrap items-center gap-4 px-1">
         {store.logo_url ? (
           <img
             src={store.logo_url}
-            alt={`لوجو ${store.name}`}
-            className={`size-20 shrink-0 rounded-lg border-4 border-background object-cover shadow ${
-              store.banner_url ? '-mt-14' : ''
-            }`}
+            alt={`شعار ${store.name}`}
+            className="size-20 sm:size-24 shrink-0 rounded-2xl border-4 border-background object-cover shadow-md bg-card -mt-10 sm:-mt-12 relative z-10"
           />
         ) : (
-          <div className="grid size-20 shrink-0 place-items-center rounded-lg bg-secondary text-5xl">
-            {CATEGORY_ICONS[store.category]}
+          <div className="grid size-20 sm:size-24 shrink-0 place-items-center rounded-2xl border-4 border-background bg-secondary text-4xl shadow-md -mt-10 sm:-mt-12 relative z-10">
+            {CATEGORY_ICONS[store.category] || "🏪"}
           </div>
         )}
 
         <div className="min-w-0 flex-1">
-          <p className="mb-2 text-sm text-muted-foreground">
-            {data.categories.find((c) => c.slug === store.category)?.name} •{' '}
-            <span className={store.is_open ? 'text-success' : ''}>
-              {store.is_open ? 'مفتوح' : 'مغلق الآن'}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="break-words text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
+              {store.name}
+            </h1>
+            {/* نوع المتجر حالياً */}
+            <span className="inline-flex items-center rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
+              {store.specialty || categoryName}
             </span>
-          </p>
-          <h1 className="break-words text-2xl md:text-3xl">{store.name}</h1>
-          <p className="mt-3 text-sm text-muted-foreground">{store.description}</p>
-          <div className="mt-4 flex flex-wrap gap-4 text-sm">
-            <span className="flex items-center gap-1">
-              <MapPin size={15} />
-              {store.address} • {data.areas.find((a) => a.id === store.area_id)?.name}
-            </span>
-            {store.phone && (
-              <a className="flex items-center gap-1 text-primary" href={`tel:${store.phone}`}>
-                <Phone size={15} />
-                {store.phone}
-              </a>
-            )}
           </div>
+          {store.rating ? (
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+              <Star className="size-3.5 fill-amber-400 text-amber-400" />
+              <span className="font-bold text-foreground">{Number(store.rating).toFixed(1)}</span>
+              <span>•</span>
+              <span>{store.reviews_count ?? 0} تقييم</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* 3. مستطيل فيه الوصف وتحته العنوان جمب علامة لوكيشن وتحته السله جمبها ايكونه تليفون فيها رقم التليفون الخاص بالمتجر */}
+      <div className="mb-8 rounded-2xl border bg-card p-4 sm:p-5 shadow-soft space-y-3.5">
+        {/* الوصف في الأعلى */}
+        {cleanDesc && (
+          <p className="text-sm sm:text-base leading-relaxed text-muted-foreground">
+            {cleanDesc}
+          </p>
+        )}
+
+        {/* العنوان تحته بجانب أيقونة لوكيشن */}
+        <div className="flex items-start sm:items-center gap-2 text-sm text-foreground/90 font-medium">
+          <MapPin className="size-4 shrink-0 text-primary mt-0.5 sm:mt-0" />
+          <span>
+            {store.address} {areaName ? `• ${areaName}` : ""}
+          </span>
         </div>
 
-        {!doctor && !service && (
-          <Button asChild>
-            <Link to="/cart">
-              <ShoppingCart />
-              السلة ({cart.count})
-            </Link>
-          </Button>
-        )}
-      </header>
+        {/* السلة بجانبها أيقونة تليفون فيها رقم التليفون الخاص بالمتجر */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/60">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* أيقونة تليفون فيها رقم التليفون الخاص بالمتجر */}
+            {store.phone && (
+              <Button
+                asChild
+                variant="outline"
+                className="gap-2 font-bold text-xs sm:text-sm h-10 border-primary/30 text-primary hover:bg-primary/10 rounded-xl"
+              >
+                <a href={`tel:${store.phone}`}>
+                  <Phone className="size-4 text-primary" />
+                  <span dir="ltr">{store.phone}</span>
+                </a>
+              </Button>
+            )}
+
+            {/* زر السلة بجانبها */}
+            {!doctor && !service && (
+              <Button
+                asChild
+                className="gap-2 font-bold text-xs sm:text-sm h-10 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm rounded-xl"
+              >
+                <Link to="/cart">
+                  <ShoppingCart className="size-4" />
+                  <span>السلة ({cart.count})</span>
+                </Link>
+              </Button>
+            )}
+          </div>
+
+          {/* رسوم التوصيل المقررة */}
+          {!doctor && !service && (
+            <div className="text-xs text-muted-foreground font-medium">
+              رسوم التوصيل المقررة: <strong className="text-primary font-bold">{money(store.delivery_fee)}</strong>
+            </div>
+          )}
+        </div>
+      </div>
 
       {!doctor && !service ? (
         <StoreProducts
