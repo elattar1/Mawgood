@@ -70,7 +70,7 @@ export const getCatalog = createServerFn({ method: 'GET' }).handler(async () => 
 });
 
 export const getStoreDetails = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ storeId: z.string().uuid() }))
+  .validator(z.object({ storeId: z.string().uuid() }))
   .handler(async ({ data }) => {
     const staticStore = REAL_STORES.find((s) => s.id === data.storeId);
     const staticProducts = REAL_PRODUCTS.filter((p) => p.store_id === data.storeId);

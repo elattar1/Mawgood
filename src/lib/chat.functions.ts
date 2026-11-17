@@ -75,7 +75,7 @@ function serializeMessagesToNotes(cleanNotes: string, messages: ChatMessage[]): 
 
 export const getOrderChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ orderId: z.string().uuid() }))
+  .validator(z.object({ orderId: z.string().uuid() }))
   .handler(async ({ context, data }): Promise<OrderChatInfo> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -270,7 +270,7 @@ export const getOrderChat = createServerFn({ method: "POST" })
 
 export const sendOrderChatMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     z.object({
       orderId: z.string().uuid(),
       message: z.string().trim().min(1, "الرسالة لا يمكن أن تكون فارغة").max(1000, "الرسالة طويلة جداً"),
@@ -776,7 +776,7 @@ export async function notifyOrderStatusUpdate(
 
 export const readOrderChatNotifications = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ orderId: z.string().uuid() }))
+  .validator(z.object({ orderId: z.string().uuid() }))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 

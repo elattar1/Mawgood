@@ -98,6 +98,173 @@ export function playNewOrderAlert(soundEnabled: boolean = true) {
 }
 
 /**
+ * نغمة إنذار المطبخ المرتفعة والمميزة وسط ضوضاء العمل (Kitchen Order Alarm)
+ */
+export function playKitchenAlarmChime() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+
+    // نغمات إنذار مطبخ سريعة وواضحة (G5 -> C6 -> E6 -> C6) لضمان لفت انتباه صاحب المتجر
+    const tones = [
+      { freq: 783.99, start: 0, duration: 0.16, gain: 0.35 },
+      { freq: 1046.50, start: 0.14, duration: 0.18, gain: 0.38 },
+      { freq: 1318.51, start: 0.28, duration: 0.22, gain: 0.40 },
+      { freq: 1046.50, start: 0.44, duration: 0.35, gain: 0.35 },
+    ];
+
+    tones.forEach(({ freq, start, duration, gain: targetGain }) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + start);
+
+      gainNode.gain.setValueAtTime(0.001, now + start);
+      gainNode.gain.exponentialRampToValueAtTime(targetGain, now + start + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc.start(now + start);
+      osc.stop(now + start + duration + 0.05);
+    });
+  } catch (err) {
+    console.warn("Could not play kitchen alarm chime:", err);
+  }
+}
+
+// ----------------------------------------------------
+// مدير إنذار المطبخ المستمر (Kitchen Order Alarm Manager)
+// ----------------------------------------------------
+let kitchenAlarmTimer: any = null;
+let kitchenAlarmMutedUntil = 0;
+const pendingAlarmOrderIds = new Set<string>();
+const kitchenAlarmSubscribers = new Set<(active: boolean, count: number) => void>();
+
+function notifyKitchenAlarmSubscribers() {
+  const active = isKitchenAlarmRinging();
+  const count = pendingAlarmOrderIds.size;
+  kitchenAlarmSubscribers.forEach((cb) => {
+    try {
+      cb(active, count);
+    } catch {}
+  });
+}
+
+/**
+ * التحقق مما إذا كان إنذار المطبخ المستمر مفعّلاً في الإعدادات
+ */
+export function getKitchenAlarmEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const saved = localStorage.getItem("husayniya_kitchen_alarm_enabled");
+    return saved !== null ? saved === "true" : true;
+  } catch {
+    return true;
+  }
+}
+
+export function setKitchenAlarmEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("husayniya_kitchen_alarm_enabled", String(enabled));
+  } catch {}
+  if (!enabled) {
+    stopAllKitchenAlarms();
+  }
+}
+
+/**
+ * هل إنذار المطبخ يرن فعلياً الآن؟
+ */
+export function isKitchenAlarmRinging(): boolean {
+  return kitchenAlarmTimer !== null && pendingAlarmOrderIds.size > 0;
+}
+
+/**
+ * بدء إنذار المطبخ المستمر لطلب وارد معين
+ */
+export function startKitchenAlarm(orderId?: string) {
+  if (!getKitchenAlarmEnabled()) return;
+  if (Date.now() < kitchenAlarmMutedUntil) return;
+
+  if (orderId) {
+    pendingAlarmOrderIds.add(orderId);
+  }
+
+  if (!kitchenAlarmTimer) {
+    // رنة فورية أولى
+    playKitchenAlarmChime();
+    triggerSoftVibration([250, 100, 250, 100, 350]);
+
+    // تكرار الرنين كل 3.5 ثانية حتى يتم قبول الطلب
+    kitchenAlarmTimer = setInterval(() => {
+      if (pendingAlarmOrderIds.size === 0 || Date.now() < kitchenAlarmMutedUntil) {
+        stopAllKitchenAlarms();
+        return;
+      }
+      playKitchenAlarmChime();
+      triggerSoftVibration([250, 100, 250, 100, 350]);
+    }, 3500);
+
+    notifyKitchenAlarmSubscribers();
+  }
+}
+
+/**
+ * إيقاف إنذار المطبخ لطلب تم قبوله
+ */
+export function stopKitchenAlarm(orderId?: string) {
+  if (orderId) {
+    pendingAlarmOrderIds.delete(orderId);
+  }
+  if (pendingAlarmOrderIds.size === 0) {
+    stopAllKitchenAlarms();
+  } else {
+    notifyKitchenAlarmSubscribers();
+  }
+}
+
+/**
+ * إيقاف كافة إنذارات المطبخ فوراً
+ */
+export function stopAllKitchenAlarms() {
+  if (kitchenAlarmTimer) {
+    clearInterval(kitchenAlarmTimer);
+    kitchenAlarmTimer = null;
+  }
+  pendingAlarmOrderIds.clear();
+  notifyKitchenAlarmSubscribers();
+}
+
+/**
+ * كتم الإنذار مؤقتاً لعدة ثوانٍ/دقائق
+ */
+export function muteKitchenAlarm(seconds: number = 120) {
+  kitchenAlarmMutedUntil = Date.now() + seconds * 1000;
+  if (kitchenAlarmTimer) {
+    clearInterval(kitchenAlarmTimer);
+    kitchenAlarmTimer = null;
+  }
+  notifyKitchenAlarmSubscribers();
+}
+
+/**
+ * الاشتراك في حالة إنذار المطبخ لتحديث واجهة المستخدم تلقائياً
+ */
+export function subscribeToKitchenAlarm(callback: (active: boolean, count: number) => void): () => void {
+  kitchenAlarmSubscribers.add(callback);
+  callback(isKitchenAlarmRinging(), pendingAlarmOrderIds.size);
+  return () => {
+    kitchenAlarmSubscribers.delete(callback);
+  };
+}
+
+/**
  * تشغيل نغمة تنبيه مخصصة للعميل حسب تغير حالة طلبه
  * (قبول وتحضير الطلب / خروج الدليفري / تسليم واكتمال الطلب / إلغاء)
  */

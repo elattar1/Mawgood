@@ -3,7 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Package, Check, X, MapPin, MessageCircle, Store, Bike, Star, Volume2, VolumeX, Clock, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Package, Check, X, MapPin, MessageCircle, Store, Bike, Star, Volume2, VolumeX, Clock, CheckCircle2, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/AppShell';
@@ -19,6 +19,7 @@ import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
 import { PushNotificationControls } from '@/components/PushNotificationControls';
 import { OrderChatDialog } from '@/components/OrderChatDialog';
 import { OrderReviewDialog } from '@/components/OrderReviewDialog';
+import { LiveDriverTrackingDialog } from '@/components/LiveDriverTrackingDialog';
 import { ChatUnreadBadge } from '@/components/ChatUnreadBadge';
 import { useOrderChatUnreadMap } from '@/lib/chat-unread';
 import { playCustomerOrderAlert, getCustomerSoundEnabled, setCustomerSoundEnabled } from '@/lib/order-alert';
@@ -71,6 +72,7 @@ function Orders() {
   const [chatOrderId, setChatOrderId] = useState<string | null>(chat || null);
   const [reviewOrder, setReviewOrder] = useState<any | null>(null);
   const [reviewsVersion, setReviewsVersion] = useState(0);
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const { getUnreadCount } = useOrderChatUnreadMap(data?.orders);
   const { user } = useAuth();
 
@@ -445,6 +447,18 @@ function Orders() {
                   );
                 })()}
 
+                {r.kind === 'orders' && r.status === 'on_the_way' && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="gap-2 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                    onClick={() => setTrackingOrderId(r.id)}
+                  >
+                    <Navigation className="size-4 animate-pulse" />
+                    تتبع موقع الكابتن الحي 🗺️
+                  </Button>
+                )}
+
                 {r.kind === 'orders' && r.status !== 'cancelled' && (
                   r.status === 'delivered' || r.status === 'completed' ? (
                     <Button
@@ -540,6 +554,14 @@ function Orders() {
         orderId={chatOrderId}
         open={!!chatOrderId}
         onOpenChange={(open) => !open && setChatOrderId(null)}
+      />
+
+      {/* خريطة تتبع موقع الكابتن الحي والمباشر */}
+      <LiveDriverTrackingDialog
+        orderId={trackingOrderId}
+        open={!!trackingOrderId}
+        onOpenChange={(open) => !open && setTrackingOrderId(null)}
+        onOpenChat={(id) => setChatOrderId(id)}
       />
 
       {/* نافذة تقييم المتجر وكابتن التوصيل بعد اكتمال الطلب */}

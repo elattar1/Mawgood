@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { getOrderChat, sendOrderChatMessage, type OrderChatInfo } from "@/lib/chat.functions";
 import { useOrderChatUnreadMap, recordChatSeen, clearActiveChatOrder, setActiveChatOrderId } from "@/lib/chat-unread";
 import { useAuth } from "@/lib/auth";
+import { triggerSoftVibration } from "@/lib/order-alert";
 
 interface OrderChatDialogProps {
   orderId: string | null;
@@ -70,10 +71,12 @@ const CUSTOMER_TO_DRIVER_PRESETS = [
 ];
 
 const DRIVER_TO_CUSTOMER_PRESETS = [
-  "أنا في الطريق إليك الآن 🛵",
-  "وصلت تحت المبنى/البيت 📍",
-  "معي الطلب وجاهز للتسليم 📦",
-  "برجاء الرد على الهاتف 📞",
+  "أنا وصلت تحت البيت 📍",
+  "في الطريق إليك 🛵",
+  "أرجو الرد على الهاتف 📞",
+  "استلمت طلبك من المحل وفي طريقي إليك 🛍️",
+  "معلش فيه زحمة دقائق وأكون عندك ⏳",
+  "أنا في انتظارك أمام المدخل 👍",
 ];
 
 export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialogProps) {
@@ -169,6 +172,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
   const handleSend = (textToSend?: string) => {
     const text = (textToSend ?? inputMessage).trim();
     if (!text || sendMutation.isPending) return;
+    triggerSoftVibration([60]);
     sendMutation.mutate(text);
   };
 
@@ -435,19 +439,46 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
         ) : (
           <>
             {/* Quick Suggestion Presets */}
-            <div className="border-t bg-card/60 px-3 py-2 shrink-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              <Sparkles className="size-3.5 text-primary shrink-0 ml-1" />
-              {presets.map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleSend(preset)}
-                  disabled={sendMutation.isPending}
-                  className="text-xs whitespace-nowrap bg-muted hover:bg-muted/80 text-foreground px-2.5 py-1 rounded-full transition-colors font-medium border border-border/50 shrink-0"
-                >
-                  {preset}
-                </button>
-              ))}
+            <div className="border-t bg-card/80 px-3 py-2 shrink-0">
+              {isDriver ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <span className="flex items-center gap-1">
+                      <Bike className="size-3.5" />
+                      ردود سريعة بنقرة واحدة (للكابتن أثناء القيادة):
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-normal">إرسال فوري ⚡</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    {presets.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSend(preset)}
+                        disabled={sendMutation.isPending}
+                        className="text-xs whitespace-nowrap bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-800 dark:text-emerald-200 px-3 py-1.5 rounded-xl transition-all font-bold border border-emerald-500/30 shrink-0 shadow-2xs"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  <Sparkles className="size-3.5 text-primary shrink-0 ml-1" />
+                  {presets.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSend(preset)}
+                      disabled={sendMutation.isPending}
+                      className="text-xs whitespace-nowrap bg-muted hover:bg-muted/80 active:scale-95 text-foreground px-2.5 py-1 rounded-full transition-colors font-medium border border-border/50 shrink-0"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Input Bar */}

@@ -14,6 +14,7 @@ import { catalogQuery, storeDetailsQuery } from '@/lib/customer-queries';
 import { placeCustomerOrder, getDeliveryAvailability } from '@/lib/customer.functions';
 import { money } from '@/lib/labels';
 import { pageMeta } from '@/lib/page-meta';
+import { isStoreCurrentlyOpen } from '@/lib/store-hours';
 import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
 
 export const Route = createFileRoute('/cart')({
@@ -81,7 +82,8 @@ function CartContents({ storeId }: { storeId: string }) {
   });
 
   const subtotal = items.reduce((sum, i) => sum + Number(i.product?.price ?? i.price) * i.qty, 0);
-  const unavailable = !store?.is_open || items.some(i => !i.product?.is_available);
+  const hoursStatus = store ? isStoreCurrentlyOpen(store) : { isOpen: true };
+  const unavailable = !store?.is_open || !hoursStatus.isOpen || items.some(i => !i.product?.is_available);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -189,7 +191,15 @@ function CartContents({ storeId }: { storeId: string }) {
                   />
                 </label>
                 <p className="border-y py-3 text-sm text-muted-foreground">طريقة الدفع: نقدًا عند الاستلام</p>
-                {unavailable && <p className="text-sm text-destructive">المتجر مغلق أو توجد منتجات غير متاحة</p>}
+                {unavailable && (
+                  <p className="text-sm text-destructive">
+                    {!hoursStatus.isOpen
+                      ? hoursStatus.reason
+                      : !store?.is_open
+                        ? 'المتجر مغلق حالياً'
+                        : 'المتجر مغلق أو توجد منتجات غير متاحة'}
+                  </p>
+                )}
                 {noDelivery && (
                   <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-destructive flex items-start gap-2.5">
                     <Truck className="size-5 shrink-0 mt-0.5" />
@@ -202,7 +212,13 @@ function CartContents({ storeId }: { storeId: string }) {
                   </div>
                 )}
                 <Button className="w-full" type="submit" disabled={busy || unavailable || noDelivery}>
-                  {busy ? 'جاري إرسال الطلب...' : noDelivery ? 'التوصيل غير متاح الآن' : 'تأكيد وإرسال الطلب'}
+                  {busy
+                    ? 'جاري إرسال الطلب...'
+                    : !hoursStatus.isOpen
+                      ? (hoursStatus.nextOpenText || 'المتجر مغلق حالياً')
+                      : noDelivery
+                        ? 'التوصيل غير متاح الآن'
+                        : 'تأكيد وإرسال الطلب'}
                   <ArrowLeft />
                 </Button>
               </form>

@@ -76,4 +76,44 @@ describe("Order Alert System (sound and vibration)", () => {
     setCustomerSoundEnabled(true);
     expect(getCustomerSoundEnabled()).toBe(true);
   });
+
+  it("handles kitchen order alarm lifecycle and muting", async () => {
+    const {
+      startKitchenAlarm,
+      stopKitchenAlarm,
+      stopAllKitchenAlarms,
+      isKitchenAlarmRinging,
+      getKitchenAlarmEnabled,
+      setKitchenAlarmEnabled,
+      muteKitchenAlarm,
+    } = await import("@/lib/order-alert");
+
+    expect(getKitchenAlarmEnabled()).toBe(true);
+
+    // Starting kitchen alarm with an order
+    startKitchenAlarm("order-123");
+    expect(isKitchenAlarmRinging()).toBe(true);
+
+    // Starting with another order
+    startKitchenAlarm("order-456");
+    expect(isKitchenAlarmRinging()).toBe(true);
+
+    // Stopping first order - still ringing for second
+    stopKitchenAlarm("order-123");
+    expect(isKitchenAlarmRinging()).toBe(true);
+
+    // Stopping second order - stops ringing
+    stopKitchenAlarm("order-456");
+    expect(isKitchenAlarmRinging()).toBe(false);
+
+    // Muting
+    startKitchenAlarm("order-789");
+    expect(isKitchenAlarmRinging()).toBe(true);
+    muteKitchenAlarm(60);
+    expect(isKitchenAlarmRinging()).toBe(false);
+
+    stopAllKitchenAlarms();
+    setKitchenAlarmEnabled(false);
+    expect(getKitchenAlarmEnabled()).toBe(false);
+  });
 });

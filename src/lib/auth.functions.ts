@@ -167,17 +167,40 @@ export const registerUserWithPhone = createServerFn({ method: "POST" })
       console.warn("Could not check auth users list:", authListErr);
     }
 
-    // 3. إنشاء الحساب الجديد مباشرة مع التفعيل الفوري
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: systemEmail,
-      password: data.password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: data.fullName,
-        phone: cleanPhone,
-        recovery_email: recoveryEmail,
-      },
-    });
+    // 3. إنشاء الحساب الجديد مباشرة مع التفعيل الفوري (وتسجيل رقم الهاتف في Supabase Auth)
+    const e164Phone = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+    let newUser: any = null;
+    let createError: any = null;
+
+    try {
+      const res = await supabaseAdmin.auth.admin.createUser({
+        email: systemEmail,
+        phone: e164Phone,
+        password: data.password,
+        email_confirm: true,
+        phone_confirm: true,
+        user_metadata: {
+          full_name: data.fullName,
+          phone: cleanPhone,
+          recovery_email: recoveryEmail,
+        },
+      });
+      newUser = res.data;
+      createError = res.error;
+    } catch {
+      const res = await supabaseAdmin.auth.admin.createUser({
+        email: systemEmail,
+        password: data.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: data.fullName,
+          phone: cleanPhone,
+          recovery_email: recoveryEmail,
+        },
+      });
+      newUser = res.data;
+      createError = res.error;
+    }
 
     const errorMsg = createError?.message?.toLowerCase() || "";
     if (
@@ -250,7 +273,22 @@ export const resolveLoginIdentifier = createServerFn({ method: "POST" })
     // ب) إذا كان المدخل أرقاماً (رقم هاتف)
     const cleanPhone = normalizePhone(raw);
     if (cleanPhone.length >= 8) {
-      // حسابات الهواتف تُنشأ ببريد نظام موحد وثابت دون الحاجة للبحث وتسريب بيانات المستخدمين
+      try {
+        const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const e164Phone = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+        const found = list.data?.users?.find(
+          (u) =>
+            u.user_metadata?.phone === cleanPhone ||
+            u.phone === cleanPhone ||
+            u.phone === e164Phone ||
+            u.email?.startsWith(`${cleanPhone}@`)
+        );
+        if (found?.email) {
+          return { authEmail: found.email };
+        }
+      } catch (err) {
+        console.warn("Could not check users list by phone:", err);
+      }
       return { authEmail: `${cleanPhone}@phone.husayniya.app` };
     }
 
@@ -289,35 +327,37 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
     } else {
       const cleanPhone = normalizePhone(raw);
       const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const e164Phone = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
       const found = list.data?.users?.find(
         (u) =>
           u.user_metadata?.phone === cleanPhone ||
           u.email?.startsWith(`${cleanPhone}@`) ||
-          u.phone === cleanPhone
+          u.phone === cleanPhone ||
+          u.phone === e164Phone
       );
 
       if (found) {
         const rec = found.user_metadata?.recovery_email;
         if (rec) {
           targetEmail = rec;
-        } else if (found.email && !found.email.endsWith("@phone.husayniya.app")) {
+        } else if (found.email && !found.email.includes("@phone.")) {
           targetEmail = found.email;
         }
       }
 
       if (!targetEmail) {
         throw new Error(
-          "لم يتم العثور على بريد إلكتروني لاستعادة كلمة المرور مسجل لهذا الرقم. يرجى التواصل مع إدارة التطبيق للمساعدة."
+          "لم يتم العثور على بريد إلكتروني لاستعادة كلمة المرور مسجل لهذا الرقم. يمكنك إعادة تسجيل الدخول أو التواصل مع إدارة التطبيق للمساعدة."
         );
       }
     }
 
     // تقييد رابط إعادة التوجيه ليكون دائماً نطاق التطبيق الرسمي منعاً لثغرات Open Redirect
     const TRUSTED_ORIGINS = [
-      "https://elattar1-husayniya.lovable.app",
+      "https://husayniya.lovable.app",
       "https://husayniya.app",
     ];
-    let safeRedirect = "https://elattar1-husayniya.lovable.app/auth";
+    let safeRedirect = "https://husayniya.lovable.app/auth";
     if (data.redirectUrl) {
       try {
         const parsed = new URL(data.redirectUrl);

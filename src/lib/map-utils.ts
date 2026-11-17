@@ -67,9 +67,77 @@ export function cleanDisplayAddress(address?: string | null): string {
   if (!address) return "";
   return address
     .replace(/<!--\s*GPS:[\s\S]*?-->/gi, "")
+    .replace(/<!--\s*DRIVER_GPS:[\s\S]*?-->/gi, "")
     .replace(/<!--\s*CHAT_V1:[\s\S]*?-->/gi, "")
     .replace(/\s*(?:📍|\(|\[)?\s*[0-9]{1,2}\.[0-9]{3,8}\s*,\s*[0-9]{1,2}\.[0-9]{3,8}(?:\)|\])?/g, "")
     .trim();
+}
+
+/**
+ * Extracts real-time driver coordinates from notes string if present:
+ * Pattern: <!-- DRIVER_GPS:lat,lng,timestamp -->
+ */
+export function extractDriverCoordinates(
+  text?: string | null
+): (Coordinates & { updatedAt?: number }) | null {
+  if (!text) return null;
+  const match = text.match(
+    /<!--\s*DRIVER_GPS:\s*([0-9]{1,2}\.[0-9]{3,8})\s*,\s*([0-9]{1,2}\.[0-9]{3,8})(?:,([0-9]+))?\s*-->/i
+  );
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    const updatedAt = match[3] ? parseInt(match[3], 10) : undefined;
+    if (
+      !isNaN(lat) &&
+      !isNaN(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    ) {
+      return { lat, lng, updatedAt };
+    }
+  }
+  return null;
+}
+
+/**
+ * Haversine formula: Calculates distance in kilometers between two GPS coordinates.
+ */
+export function calculateDistanceKm(c1: Coordinates, c2: Coordinates): number {
+  const R = 6371; // Earth's mean radius in km
+  const dLat = ((c2.lat - c1.lat) * Math.PI) / 180;
+  const dLng = ((c2.lng - c1.lng) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((c1.lat * Math.PI) / 180) *
+      Math.cos((c2.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
+ * Formats distance into friendly Arabic string (e.g. "650 متر" or "1.8 كم").
+ */
+export function formatDistanceArabic(km: number): string {
+  if (km < 1) {
+    const meters = Math.max(50, Math.round(km * 1000));
+    return `${meters} متر`;
+  }
+  return `${km.toFixed(1)} كم`;
+}
+
+/**
+ * Estimates delivery arrival time in minutes for motorcycle in Egyptian towns (~20-25 km/h).
+ */
+export function estimateDeliveryMinutes(km: number): number {
+  if (km <= 0.1) return 1; // Under 100m, essentially arrived
+  const averageSpeedKmH = 22;
+  const hours = km / averageSpeedKmH;
+  return Math.max(2, Math.round(hours * 60) + 1);
 }
 
 /**

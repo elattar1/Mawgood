@@ -3,7 +3,7 @@ import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 import { pushTokenInput, isStalePushToken } from './push-rules';
 
 export const registerPushDevice = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth]).inputValidator(pushTokenInput)
+  .middleware([requireSupabaseAuth]).validator(pushTokenInput)
   .handler(async ({ data, context }) => {
     const result = await context.supabase.from('customer_push_devices').upsert({ user_id: context.userId, token: data.token, updated_at: new Date().toISOString() }, { onConflict: 'user_id,token' });
     if (result.error) throw new Error('تعذر حفظ إعدادات إشعارات هذا الجهاز');
@@ -11,7 +11,7 @@ export const registerPushDevice = createServerFn({ method: 'POST' })
   });
 
 export const sendTestPush = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth]).inputValidator(pushTokenInput)
+  .middleware([requireSupabaseAuth]).validator(pushTokenInput)
   .handler(async ({ data, context }) => {
     const device = await context.supabase.from('customer_push_devices').select('id,token').eq('user_id', context.userId).eq('token', data.token).maybeSingle();
     if (device.error || !device.data) throw new Error('فعّل إشعارات هذا الجهاز أولًا');

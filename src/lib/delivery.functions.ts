@@ -25,7 +25,7 @@ export const getDriverBoard = createServerFn({ method: "POST" })
 
 export const setMyDriverWorkingStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ is_active: z.boolean() }))
+  .validator(z.object({ is_active: z.boolean() }))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const driver = await supabaseAdmin.from("drivers").select("user_id").eq("user_id", context.userId).maybeSingle();
@@ -36,7 +36,7 @@ export const setMyDriverWorkingStatus = createServerFn({ method: "POST" })
   });
 
 export const claimOrder = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ id: z.string().uuid() }))
+  .validator(z.object({ id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const r = await context.supabase.rpc("driver_claim_order", { _order_id: data.id });
     if (r.error) throw new Error(r.error.message);
@@ -54,7 +54,7 @@ export const claimOrder = createServerFn({ method: "POST" }).middleware([require
   });
 
 export const completeOrder = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ id: z.string().uuid() }))
+  .validator(z.object({ id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const r = await context.supabase.rpc("driver_complete_order", { _order_id: data.id });
     if (r.error) throw new Error(r.error.message);
@@ -95,20 +95,164 @@ export const getDrivers = createServerFn({ method: "POST" }).middleware([require
   });
 
 export const saveDriver = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator(driverInput)
+  .validator(driverInput)
   .handler(async ({ context, data }) => {
     await assertAdmin(context.supabase, context.userId);
-    const r = await context.supabase.rpc("admin_save_driver", { _email: data.email, _full_name: data.full_name, _phone: data.phone, _active: data.is_active });
+    let targetEmail = data.email.trim();
+    if (!targetEmail.includes("@")) {
+      const { normalizePhone } = await import("@/lib/auth.functions");
+      const cleanPhone = normalizePhone(targetEmail);
+      if (cleanPhone.length >= 8) {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        try {
+          const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+          const found = list.data?.users?.find(
+            (u) =>
+              u.user_metadata?.phone === cleanPhone ||
+              u.phone === cleanPhone ||
+              u.email?.startsWith(`${cleanPhone}@`)
+          );
+          if (found?.email) {
+            targetEmail = found.email;
+          } else {
+            targetEmail = `${cleanPhone}@phone.husayniya.app`;
+          }
+        } catch {
+          targetEmail = `${cleanPhone}@phone.husayniya.app`;
+        }
+      }
+    }
+    const r = await context.supabase.rpc("admin_save_driver", { _email: targetEmail, _full_name: data.full_name, _phone: data.phone, _active: data.is_active });
     if (r.error) throw new Error(r.error.message);
     return { ok: true };
   });
 
 export const setDriverActive = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ user_id: z.string().uuid(), is_active: z.boolean() }))
+  .validator(z.object({ user_id: z.string().uuid(), is_active: z.boolean() }))
   .handler(async ({ context, data }) => {
     await assertAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const r = await supabaseAdmin.from("drivers").update({ is_active: data.is_active }).eq("user_id", data.user_id);
     if (r.error) throw new Error(r.error.message);
     return { ok: true };
+  });
+
+export const updateDriverLocation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    z.object({
+      orderId: z.string().uuid(),
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+    })
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const orderRes = await supabaseAdmin
+      .from("orders")
+      .select("id, driver_id, status, notes")
+      .eq("id", data.orderId)
+      .maybeSingle();
+
+    if (!orderRes.data) throw new Error("الطلب غير موجود");
+    if (orderRes.data.driver_id !== context.userId) {
+      throw new Error("لا تملك صلاحية تحديث موقع هذا الطلب");
+    }
+
+    // Only update live GPS if order is actively on the way
+    if (orderRes.data.status !== "on_the_way") {
+      return { ok: true, ignored: true };
+    }
+
+    const now = Date.now();
+    const tag = `<!-- DRIVER_GPS:${data.lat.toFixed(6)},${data.lng.toFixed(6)},${now} -->`;
+    const currentNotes = orderRes.data.notes || "";
+    let newNotes = currentNotes;
+
+    if (/<!--\s*DRIVER_GPS:[\s\S]*?-->/i.test(newNotes)) {
+      newNotes = newNotes.replace(/<!--\s*DRIVER_GPS:[\s\S]*?-->/i, tag);
+    } else {
+      newNotes = newNotes ? `${newNotes}\n${tag}` : tag;
+    }
+
+    const updateRes = await supabaseAdmin
+      .from("orders")
+      .update({ notes: newNotes })
+      .eq("id", data.orderId);
+
+    if (updateRes.error) throw new Error("تعذر حفظ إحداثيات موقع السائق");
+
+    return {
+      ok: true,
+      lat: data.lat,
+      lng: data.lng,
+      updatedAt: now,
+    };
+  });
+
+export const getDriverLocation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    z.object({
+      orderId: z.string().uuid(),
+    })
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const orderRes = await supabaseAdmin
+      .from("orders")
+      .select("id, status, customer_id, driver_id, notes, address, store_id, stores(name, address, phone)")
+      .eq("id", data.orderId)
+      .maybeSingle();
+
+    if (!orderRes.data) throw new Error("الطلب غير موجود");
+
+    const isCustomer = orderRes.data.customer_id === context.userId;
+    const isDriver = orderRes.data.driver_id === context.userId;
+
+    if (!isCustomer && !isDriver) {
+      const roleCheck = await context.supabase.rpc("has_role", {
+        _user_id: context.userId,
+        _role: "admin",
+      });
+      if (!roleCheck.data) {
+        throw new Error("غير مصرح لك بتتبع موقع هذا الطلب");
+      }
+    }
+
+    // Fetch driver details if assigned
+    let driverInfo: { name: string; phone: string | null } | null = null;
+    if (orderRes.data.driver_id) {
+      const dr = await supabaseAdmin
+        .from("drivers")
+        .select("full_name, phone")
+        .eq("user_id", orderRes.data.driver_id)
+        .maybeSingle();
+      if (dr.data) {
+        driverInfo = {
+          name: dr.data.full_name,
+          phone: dr.data.phone || null,
+        };
+      }
+    }
+
+    const { extractDriverCoordinates, extractCoordinates } = await import("@/lib/map-utils");
+    const driverCoords = extractDriverCoordinates(orderRes.data.notes);
+    const customerCoords = extractCoordinates(orderRes.data.address);
+    const storeAddress = (orderRes.data.stores as any)?.address;
+    const storeCoords = extractCoordinates(storeAddress);
+
+    return {
+      orderId: data.orderId,
+      status: orderRes.data.status,
+      driverCoords,
+      customerCoords,
+      storeCoords,
+      customerAddress: orderRes.data.address,
+      storeName: (orderRes.data.stores as any)?.name ?? "المتجر",
+      storePhone: (orderRes.data.stores as any)?.phone ?? null,
+      driverInfo,
+    };
   });

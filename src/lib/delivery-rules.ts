@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const driverInput = z.object({
-  email: z.string().trim().email("البريد غير صحيح"),
+  email: z.string().trim().min(3, "يرجى كتابة رقم الموبايل أو البريد الإلكتروني"),
   full_name: z.string().trim().min(2, "اكتب اسم الكابتن").max(80),
   phone: z.string().trim().regex(/^01[0125]\d{8}$/, "رقم موبايل مصري غير صحيح"),
   is_active: z.boolean(),

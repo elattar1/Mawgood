@@ -22,7 +22,7 @@ import { REAL_STORES, REAL_SECTIONS, REAL_PRODUCTS } from "./real-stores-data";
 
 export const getDashboard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ admin: z.boolean() }))
+  .validator(z.object({ admin: z.boolean() }))
   .handler(async ({ context, data }) => {
     const db = context.supabase;
     if (data.admin) {
@@ -200,7 +200,7 @@ export const getDashboard = createServerFn({ method: "POST" })
 
 export const getDashboardProducts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ storeId: z.string().uuid() }))
+  .validator(z.object({ storeId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     const isAdmin = !!roleCheck.data;
@@ -226,7 +226,7 @@ export const getDashboardProducts = createServerFn({ method: "POST" })
 
 export const getDashboardSections = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ storeId: z.string().uuid() }))
+  .validator(z.object({ storeId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     const isAdmin = !!roleCheck.data;
@@ -253,7 +253,7 @@ export const getDashboardSections = createServerFn({ method: "POST" })
 
 export const getDashboardOrderItems = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ orderId: z.string().uuid(), admin: z.boolean() }))
+  .validator(z.object({ orderId: z.string().uuid(), admin: z.boolean() }))
   .handler(async ({ context, data }) => {
     if (data.admin) {
       const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -277,7 +277,7 @@ export const getDashboardOrderItems = createServerFn({ method: "POST" })
 
 export const saveStore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(storeInput)
+  .validator(storeInput)
   .handler(async ({ context, data }) => {
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     const isAdmin = !!roleCheck.data;
@@ -337,7 +337,7 @@ export const saveStore = createServerFn({ method: "POST" })
 
 export const saveSection = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(sectionInput)
+  .validator(sectionInput)
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -377,7 +377,7 @@ export const saveSection = createServerFn({ method: "POST" })
 
 export const addSuggestedSections = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ store_id: z.string().uuid() }))
+  .validator(z.object({ store_id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -411,7 +411,7 @@ export const addSuggestedSections = createServerFn({ method: "POST" })
 
 export const deleteSection = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ id: z.string().uuid(), store_id: z.string().uuid() }))
+  .validator(z.object({ id: z.string().uuid(), store_id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -447,7 +447,7 @@ export const deleteSection = createServerFn({ method: "POST" })
 
 export const saveProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(productInput)
+  .validator(productInput)
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -480,7 +480,7 @@ export const saveProduct = createServerFn({ method: "POST" })
 
 export const deleteProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ id: z.string().uuid(), store_id: z.string().uuid() }))
+  .validator(z.object({ id: z.string().uuid(), store_id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -510,7 +510,7 @@ export const deleteProduct = createServerFn({ method: "POST" })
 
 export const approveStore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(commissionInput)
+  .validator(commissionInput)
   .handler(async ({ context, data }) => {
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
@@ -526,7 +526,7 @@ export const approveStore = createServerFn({ method: "POST" })
 
 export const transferStoreOwnership = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(transferStoreOwnershipInput)
+  .validator(transferStoreOwnershipInput)
   .handler(async ({ context, data }) => {
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
@@ -629,7 +629,7 @@ export const transferStoreOwnership = createServerFn({ method: "POST" })
 
 export const updateRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     z.object({
       kind: z.enum(requestKinds),
       id: z.string().uuid(),
@@ -740,7 +740,7 @@ export const updateRequest = createServerFn({ method: "POST" })
 
 export const importCatalogProducts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(catalogImportInput)
+  .validator(catalogImportInput)
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -810,7 +810,7 @@ export const importCatalogProducts = createServerFn({ method: "POST" })
 
 export const sendBroadcastNotification = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     z.object({
       title: z.string().trim().min(3, "عنوان الإشعار يجب أن لا يقل عن 3 أحرف").max(100),
       body: z.string().trim().min(5, "نص الإشعار يجب أن لا يقل عن 5 أحرف").max(500),
@@ -904,7 +904,7 @@ export const sendBroadcastNotification = createServerFn({ method: "POST" })
 
 export const getBroadcastAudienceCount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ target: z.string() }))
+  .validator(z.object({ target: z.string() }))
   .handler(async ({ context, data }) => {
     const roleCheck = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     if (roleCheck.error || !roleCheck.data) {
@@ -942,7 +942,7 @@ export const getBroadcastAudienceCount = createServerFn({ method: "POST" })
 
 export const deleteStore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(deleteStoreInput)
+  .validator(deleteStoreInput)
   .handler(async ({ context, data }) => {
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
@@ -987,7 +987,7 @@ export const deleteStore = createServerFn({ method: "POST" })
 
 export const toggleStoreVisibility = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(storeVisibilityInput)
+  .validator(storeVisibilityInput)
   .handler(async ({ context, data }) => {
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");
@@ -1005,7 +1005,7 @@ export const toggleStoreVisibility = createServerFn({ method: "POST" })
 
 export const requestStoreDeletion = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(storeDeletionRequestInput)
+  .validator(storeDeletionRequestInput)
   .handler(async ({ context, data }) => {
     const store = await context.supabase
       .from("stores")
@@ -1126,7 +1126,7 @@ export const requestStoreDeletion = createServerFn({ method: "POST" })
 
 export const cancelStoreDeletionRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(cancelStoreDeletionRequestInput)
+  .validator(cancelStoreDeletionRequestInput)
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
@@ -1201,7 +1201,7 @@ export const cancelStoreDeletionRequest = createServerFn({ method: "POST" })
 
 export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(reviewStoreDeletionRequestInput)
+  .validator(reviewStoreDeletionRequestInput)
   .handler(async ({ context, data }) => {
     const role = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
     if (role.error || !role.data) throw new Error("هذه العملية مخصصة للإدارة فقط");

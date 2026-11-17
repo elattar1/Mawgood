@@ -52,7 +52,18 @@ import { Field, SelectField, ToggleField } from "./fields";
 import { ImageUploadField } from "./ImageUpload";
 import { CatalogPicker } from "./CatalogPicker";
 import { dashboardQuery, dashboardProductsQuery, dashboardSectionsQuery, dashboardOrderItemsQuery, type DashboardData, type DashboardProduct, type DashboardSection } from "./queries";
-import { playNewOrderAlert } from "@/lib/order-alert";
+import { 
+  playNewOrderAlert,
+  startKitchenAlarm,
+  stopKitchenAlarm,
+  stopAllKitchenAlarms,
+  muteKitchenAlarm,
+  isKitchenAlarmRinging,
+  getKitchenAlarmEnabled,
+  setKitchenAlarmEnabled,
+  subscribeToKitchenAlarm,
+} from "@/lib/order-alert";
+import { parseStoreHours, cleanStoreDescription, embedStoreHoursInDescription } from "@/lib/store-hours";
 import {
   saveStore,
   saveProduct,
@@ -253,6 +264,15 @@ export function Dashboard({
     return true;
   });
 
+  const [kitchenAlarmActive, setKitchenAlarmActive] = useState(false);
+  const [kitchenAlarmEnabled, setKitchenAlarmEnabledState] = useState(() => getKitchenAlarmEnabled());
+
+  useEffect(() => {
+    return subscribeToKitchenAlarm((active) => {
+      setKitchenAlarmActive(active);
+    });
+  }, []);
+
   const toggleSound = () => {
     setSoundEnabled(prev => {
       const next = !prev;
@@ -308,12 +328,19 @@ export function Dashboard({
   const prevPendingCount = useRef(pendingTasks.length);
   const prevStoreId = useRef(store?.id);
 
-  // تشغيل نغمة تنبيه واهتزاز خفيف عند ورود طلبات جديدة للمتجر
+  // تشغيل إنذار المطبخ المستمر للطلبات الجديدة في انتظار القبول
   useEffect(() => {
     if (prevStoreId.current !== store?.id) {
       prevStoreId.current = store?.id;
       prevPendingCount.current = pendingTasks.length;
+      stopAllKitchenAlarms();
       return;
+    }
+
+    if (pendingTasks.length > 0 && soundEnabled && kitchenAlarmEnabled) {
+      pendingTasks.forEach((t) => startKitchenAlarm(t.id));
+    } else {
+      stopAllKitchenAlarms();
     }
 
     if (pendingTasks.length > prevPendingCount.current) {
@@ -327,7 +354,13 @@ export function Dashboard({
       );
     }
     prevPendingCount.current = pendingTasks.length;
-  }, [pendingTasks.length, store?.id, soundEnabled]);
+  }, [pendingTasks.length, store?.id, soundEnabled, kitchenAlarmEnabled]);
+
+  useEffect(() => {
+    return () => {
+      stopAllKitchenAlarms();
+    };
+  }, []);
 
   const deletionRequests = ((data as any).storeDeletionRequests ?? []) as any[];
   const pendingDeletionRequests = deletionRequests.filter((r: any) => r.status === "pending");
@@ -426,6 +459,11 @@ export function Dashboard({
   function submitStore(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const rawDesc = String(form.get("description") || "");
+    const openTime = String(form.get("open_time") || "");
+    const closeTime = String(form.get("close_time") || "");
+    const finalDesc = openTime && closeTime ? embedStoreHoursInDescription(rawDesc, openTime, closeTime) : rawDesc;
+
     execute(
       () =>
         doSaveStore({
@@ -434,7 +472,7 @@ export function Dashboard({
             name: String(form.get("name")),
             category: String(form.get("category")),
             area_id: Number(form.get("area_id")) || null,
-            description: String(form.get("description")),
+            description: finalDesc,
             phone: String(form.get("phone")),
             address: String(form.get("address")),
             specialty: String(form.get("specialty")),
@@ -554,6 +592,35 @@ export function Dashboard({
           >
             {soundEnabled ? <Volume2 className="size-4 text-primary" /> : <VolumeX className="size-4 text-muted-foreground" />}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`gap-1.5 text-xs font-bold ${
+              kitchenAlarmEnabled
+                ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
+                : "text-muted-foreground"
+            }`}
+            aria-label="إنذار المطبخ المستمر"
+            title={
+              kitchenAlarmEnabled
+                ? "إنذار المطبخ المستمر مفعّل (يرن بشكل متكرر حتى قبول الطلب)"
+                : "إنذار المطبخ المستمر معطل (رنة عادية واحدة فقط)"
+            }
+            onClick={() => {
+              const next = !kitchenAlarmEnabled;
+              setKitchenAlarmEnabled(next);
+              setKitchenAlarmEnabledState(next);
+              toast.info(
+                next
+                  ? "تم تفعيل إنذار المطبخ المستمر 🔔 (رنين متكرر حتى قبول الطلب)"
+                  : "تم تعطيل إنذار المطبخ المستمر (رنة واحدة فقط) 🔕"
+              );
+            }}
+          >
+            <Volume2 className={`size-3.5 ${kitchenAlarmEnabled ? "animate-pulse" : ""}`} />
+            <span className="hidden sm:inline">إنذار المطبخ:</span>
+            <span>{kitchenAlarmEnabled ? "مستمر 🔔" : "رنة واحدة"}</span>
+          </Button>
           <Button variant="outline" size="icon" aria-label="تحديث البيانات" title="تحديث البيانات" onClick={() => client.invalidateQueries({ queryKey: ["dashboard"] })}>
             <RefreshCw className="size-4" />
           </Button>
@@ -564,6 +631,64 @@ export function Dashboard({
           )}
         </div>
       </div>
+
+      {/* إنذار المطبخ المستمر عند ورود طلبات قيد الانتظار */}
+      {kitchenAlarmActive && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-destructive bg-destructive/15 p-4 text-destructive shadow-md animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-destructive text-white flex items-center justify-center shrink-0">
+              <Volume2 className="size-5 animate-bounce" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-sm sm:text-base">
+                🚨 إنذار المطبخ مستمر: لديك {pendingTasks.length} {pendingTasks.length === 1 ? "طلب جديد قيد الانتظار" : "طلبات جديدة قيد الانتظار"}!
+              </h4>
+              <p className="text-xs text-destructive/90 mt-0.5">
+                لن يتوقف صوت الرنين المتكرر حتى تضغط على قبول الطلب أو كتم الإنذار مؤقتاً.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                muteKitchenAlarm(120);
+                toast.info("تم كتم إنذار المطبخ مؤقتاً لمدة دقيقتين 🔕");
+              }}
+              className="border-destructive/40 bg-card text-destructive hover:bg-destructive/10 text-xs font-bold gap-1.5 h-9"
+            >
+              <VolumeX className="size-3.5" />
+              كتم مؤقت (دقيقتين)
+            </Button>
+            {pendingTasks[0] && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  execute(
+                    () =>
+                      doUpdate({
+                        data: {
+                          id: pendingTasks[0].id,
+                          kind: pendingTasks[0].kind,
+                          status: "preparing",
+                        },
+                      }),
+                    () => {
+                      stopKitchenAlarm(pendingTasks[0].id);
+                      toast.success("تم قبول الطلب وبدء التحضير! تم إيقاف الإنذار.");
+                    }
+                  );
+                }}
+                className="bg-destructive text-white hover:bg-destructive/90 text-xs font-bold gap-1.5 h-9 shadow-sm"
+              >
+                <Check className="size-4" />
+                قبول أول طلب الآن
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       <Tabs dir="rtl" value={tab} onValueChange={onTab}>
         <TabsContent value="stores">
@@ -1855,7 +1980,31 @@ export function Dashboard({
             </SelectField>
             <Field name="address" label="العنوان" value={editedStore?.address} required />
             <Field name="specialty" label="التخصص (للأطباء والخدمات)" value={editedStore?.specialty ?? ""} />
-            <Field name="description" label="وصف المتجر" value={editedStore?.description} />
+            {(() => {
+              const storeHours = parseStoreHours(editedStore || {});
+              return (
+                <>
+                  <Field name="description" label="وصف المتجر" value={cleanStoreDescription(editedStore?.description)} />
+                  <div className="grid grid-cols-2 gap-3 sm:col-span-2 rounded-xl border bg-muted/20 p-3">
+                    <Field
+                      name="open_time"
+                      label="ساعة الفتح اليومية"
+                      type="time"
+                      value={storeHours.openTime}
+                    />
+                    <Field
+                      name="close_time"
+                      label="ساعة الإغلاق اليومية"
+                      type="time"
+                      value={storeHours.closeTime}
+                    />
+                    <p className="col-span-2 text-[11px] text-muted-foreground">
+                      مواعيد العمل التلقائية: يغلق المتجر تلقائياً خارج هذه المواعيد لمنع استقبال طلبات في غير أوقات العمل.
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
             <Field name="delivery_fee" label="رسوم التوصيل (ج.م)" type="number" value={editedStore?.delivery_fee ?? 0} />
             <Field name="booking_fee" label="رسوم الحجز (ج.م)" type="number" value={editedStore?.booking_fee ?? 0} />
             {admin && (

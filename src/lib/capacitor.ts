@@ -76,4 +76,55 @@ export async function initCapacitorApp(): Promise<void> {
   } catch (err) {
     console.warn('[Capacitor] appUrlOpen listener setup error:', err);
   }
+
+  try {
+    // 5. Native Push Notifications Registration (Android / iOS)
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+
+    let permStatus = await PushNotifications.checkPermissions();
+    if (permStatus.receive === 'prompt') {
+      permStatus = await PushNotifications.requestPermissions();
+    }
+
+    if (permStatus.receive === 'granted') {
+      // Create high-importance Android notification channel for orders & chat alerts
+      if (Capacitor.getPlatform() === 'android') {
+        await PushNotifications.createChannel({
+          id: 'orders_channel',
+          name: 'طلبات وتنبيهات خدمات الحسينية',
+          description: 'تنبيهات فورية بحالات الطلبات ومحادثات المتاجر والدليفري',
+          importance: 5,
+          visibility: 1,
+          sound: 'default',
+          vibration: true,
+        });
+      }
+
+      await PushNotifications.register();
+
+      PushNotifications.addListener('registration', async (token) => {
+        try {
+          const { savePushDeviceToken } = await import('@/lib/push.functions');
+          await savePushDeviceToken({
+            data: {
+              token: token.value,
+              userAgent: `Capacitor-Android/${Capacitor.getPlatform()}`,
+            },
+          });
+        } catch (tokErr) {
+          console.warn('[Capacitor] Push token save error:', tokErr);
+        }
+      });
+
+      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+        const data = notification.notification.data;
+        const targetPath = data?.path || data?.link || '/orders';
+        if (targetPath) {
+          window.location.href = targetPath;
+        }
+      });
+    }
+  } catch (pushErr) {
+    console.warn('[Capacitor] Native PushNotifications setup notice:', pushErr);
+  }
 }

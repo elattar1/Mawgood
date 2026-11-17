@@ -12,6 +12,7 @@ import hero from '@/assets/hero.jpg';
 import { ServiceRecommendations } from '@/components/ServiceRecommendations';
 import { useAuth } from '@/lib/auth';
 import { useOffersVisibility } from '@/lib/use-offers-visibility';
+import { isStoreCurrentlyOpen, cleanStoreDescription } from '@/lib/store-hours';
 
 export const Route = createFileRoute('/')({
   validateSearch: (s: SearchSchemaInput & { q?: unknown; category?: unknown; area?: unknown }) => ({
@@ -239,14 +240,20 @@ function Browse() {
                     <span className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-md">
                       {data.categories.find((c) => c.slug === s.category)?.name}
                     </span>
-                    <span
-                      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-md ${
-                        s.is_open ? 'bg-emerald-600/90 text-white shadow-sm' : 'bg-black/60 text-white/80'
-                      }`}
-                    >
-                      <Clock3 size={12} />
-                      {s.is_open ? 'مفتوح' : 'مغلق'}
-                    </span>
+                    {(() => {
+                      const hours = isStoreCurrentlyOpen(s);
+                      return (
+                        <span
+                          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-md ${
+                            hours.isOpen ? 'bg-emerald-600/90 text-white shadow-sm' : 'bg-black/60 text-white/80'
+                          }`}
+                          title={hours.reason || hours.formattedHours}
+                        >
+                          <Clock3 size={12} />
+                          {hours.isOpen ? 'مفتوح' : (hours.nextOpenText || 'مغلق')}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* اللوجو فوق صورة البانر مع اسم المتجر والمنطقة */}
@@ -278,7 +285,7 @@ function Browse() {
                 {/* باقي البيانات تظهر بوضوح تام أسفل التدرج */}
                 <div className="flex flex-1 flex-col p-4 pt-2">
                   <p className="mb-3 line-clamp-2 flex-1 text-xs leading-relaxed text-muted-foreground">
-                    {s.description || s.specialty}
+                    {cleanStoreDescription(s.description) || s.specialty}
                   </p>
 
                   <div className="flex items-center justify-between border-t border-border/60 pt-3 text-xs">

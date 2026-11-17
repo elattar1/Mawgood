@@ -275,7 +275,7 @@ function AccountPage() {
           type: complaintType,
           title: complaintTitle.trim(),
           description: complaintDesc.trim(),
-          customerName: fullName.trim() || user.email?.split("@")[0] || "عميل",
+          customerName: fullName.trim() || user.user_metadata?.full_name || phoneNumber || "عميل",
           phone: phoneNumber.trim() || "",
           imageUrl: finalImageUrl,
         },
@@ -371,13 +371,18 @@ function AccountPage() {
     );
   }
 
+  const isPhoneAccount = !user.email || user.email.includes("@phone.") || /^\d+@/.test(user.email);
+  const displayContact = isPhoneAccount
+    ? (user.user_metadata?.phone || phoneNumber || user.email?.split("@")[0] || "")
+    : user.email;
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 md:py-12">
       {/* رأس الصفحة */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b pb-5">
         <div className="flex items-center gap-3">
           <div className="grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground font-bold text-xl shadow-soft">
-            {fullName ? fullName.slice(0, 1) : user.email?.slice(0, 1).toUpperCase()}
+            {fullName ? fullName.slice(0, 1) : (isPhoneAccount ? "ح" : user.email?.slice(0, 1).toUpperCase())}
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -388,8 +393,8 @@ function AccountPage() {
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground" dir="ltr">
-              {user.email}
+            <p className="text-sm text-muted-foreground font-medium" dir="ltr">
+              {displayContact}
             </p>
           </div>
         </div>

@@ -78,13 +78,13 @@ function translateAuthError(err: unknown): string {
     return "خدمة الدخول بحساب Google بانتظار إضافة مفتاح (OAuth Secret) في لوحة التحكم. يمكنك تسجيل الدخول فوراً وبكل سهولة برقم التليفون أو البريد الإلكتروني أدناه.";
   }
   if (msg.includes("Invalid login credentials")) {
-    return "البيانات المدخلة أو كلمة المرور غير صحيحة.";
+    return "رقم الهاتف / البريد أو كلمة المرور غير صحيحة.";
   }
   if (msg.includes("Email not confirmed")) {
     return "تم تفعيل الحساب تلقائياً، يرجى الضغط على تسجيل الدخول مجدداً.";
   }
   if (msg.includes("User already registered") || msg.includes("already registered") || msg.includes("يوجد مستخدم بالفعل")) {
-    return "يوجد مستخدم بالفعل مسجل بهذه البيانات، يرجى تسجيل الدخول.";
+    return "يوجد مستخدم بالفعل مسجل برقم الهاتف أو البيانات هذه، يرجى تسجيل الدخول.";
   }
   if (msg.includes("Password should be at least")) {
     return "كلمة المرور يجب أن لا تقل عن 6 أحرف أو أرقام.";
@@ -122,19 +122,57 @@ function Auth() {
 
   const targetPath = redirect.startsWith("/admin") ? "/admin" : redirect || "/";
 
-  // 1. تسجيل الدخول بالاسم أو رقم التليفون أو البريد الإلكتروني
+  // 1. تسجيل الدخول برقم التليفون أو البريد الإلكتروني أو الاسم
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     const cleanId = loginIdentifier.trim();
     if (!cleanId || !password.trim()) {
-      setError("يرجى إدخال الاسم، رقم التليفون، أو البريد وكلمة المرور");
+      setError("يرجى إدخال رقم الهاتف أو البريد وكلمة المرور");
       return;
     }
     setBusy(true);
     setError("");
     setSuccessMsg("");
     try {
-      // تحويل الاسم أو رقم الهاتف أو البريد إلى الحساب المعتمد
+      const cleanPhone = normalizePhone(cleanId);
+      const isPhone = cleanPhone.length >= 10;
+
+      // أ) محاولة الدخول برقم الهاتف مباشرة في حال تفعيل موفر الهاتف
+      if (isPhone) {
+        const e164 = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+        try {
+          const nativeRes = await supabase.auth.signInWithPassword({
+            phone: e164,
+            password: password.trim(),
+          });
+          if (nativeRes.data?.session) {
+            navigate({ to: targetPath });
+            return;
+          }
+          const nativeErrMsg = nativeRes.error?.message?.toLowerCase() || "";
+          const nativeCode = (nativeRes.error as any)?.code;
+          if (
+            nativeRes.error &&
+            nativeCode !== "phone_provider_disabled" &&
+            !nativeErrMsg.includes("disabled") &&
+            !nativeErrMsg.includes("unsupported")
+          ) {
+            throw nativeRes.error;
+          }
+        } catch (nativeErr: any) {
+          const msg = nativeErr?.message?.toLowerCase() || "";
+          const code = nativeErr?.code;
+          if (
+            code !== "phone_provider_disabled" &&
+            !msg.includes("disabled") &&
+            !msg.includes("unsupported")
+          ) {
+            throw nativeErr;
+          }
+        }
+      }
+
+      // ب) الدخول عبر المعرف المعتمد
       const resolveRes = await resolveLoginIdentifier({
         data: { identifier: cleanId },
       });
@@ -315,12 +353,12 @@ function Auth() {
     }
   }
 
+  const userPhone = user?.user_metadata?.phone;
+  const isPhoneUser = !user?.email || user?.email.includes("@phone.") || /^\d+@/.test(user?.email || "");
   const displayUser =
     user?.user_metadata?.full_name ||
-    user?.user_metadata?.phone ||
-    (user?.email?.endsWith("@phone.husayniya.app")
-      ? user?.email.replace("@phone.husayniya.app", "")
-      : user?.email) ||
+    userPhone ||
+    (isPhoneUser ? user?.email?.split("@")[0] : user?.email) ||
     "حساب مسجل";
 
   return (
@@ -479,20 +517,22 @@ function Auth() {
                   <form onSubmit={handleSignIn} className="space-y-3.5">
                     <div className="space-y-1.5 text-right">
                       <label className="text-xs font-semibold text-foreground flex items-center gap-1.5 justify-end">
-                        <span>الاسم أو رقم التليفون أو البريد</span>
+                        <span>رقم الهاتف أو البريد الإلكتروني</span>
                         <Phone className="size-3.5 text-muted-foreground" />
                       </label>
                       <Input
                         type="text"
                         required
-                        placeholder="01xxxxxxxxx أو الاسم أو البريد الإلكتروني"
+                        placeholder="010xxxxxxxx أو البريد الإلكتروني"
                         value={loginIdentifier}
                         onChange={(e) => {
                           setLoginIdentifier(e.target.value);
                           setError("");
                         }}
                         disabled={busy}
-                        className="h-11 text-right"
+                        className="h-11 text-left"
+                        dir="ltr"
+                        autoComplete="username"
                       />
                     </div>
 
@@ -577,7 +617,7 @@ function Auth() {
                     {/* رقم التليفون */}
                     <div className="space-y-1.5 text-right">
                       <label className="text-xs font-semibold text-foreground flex items-center gap-1.5 justify-end">
-                        <span>رقم التليفون / الموبايل</span>
+                        <span>رقم الهاتف / الموبايل</span>
                         <span className="text-destructive">*</span>
                         <Phone className="size-3.5 text-muted-foreground" />
                       </label>
@@ -593,8 +633,9 @@ function Auth() {
                         disabled={busy}
                         className="h-11 text-left"
                         dir="ltr"
+                        autoComplete="tel"
                       />
-                      <p className="text-[11px] text-muted-foreground">التسجيل يتم فورياً بدون انتظار أي كود تأكيد</p>
+                      <p className="text-[11px] text-muted-foreground">التسجيل فوري برقم هاتفك وبدون انتظار أي كود تأكيد</p>
                     </div>
 
                     {/* البريد الإلكتروني لاستعادة كلمة السر */}

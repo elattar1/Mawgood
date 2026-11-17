@@ -8,7 +8,7 @@ import { TIME_SLOTS } from './labels';
 
 export const placeCustomerOrder = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator(checkoutInput)
+  .validator(checkoutInput)
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
     const { REAL_STORES, REAL_SECTIONS, REAL_PRODUCTS } = await import('./real-stores-data');
@@ -16,7 +16,7 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
     // 1. Ensure store exists in DB (auto-seed if it's a curated store)
     let store = await context.supabase
       .from('stores')
-      .select('id,name,owner_id,is_active,is_open,category,delivery_fee,commission_rate')
+      .select('id,name,owner_id,is_active,is_open,description,category,delivery_fee,commission_rate')
       .eq('id', data.store_id)
       .maybeSingle();
 
@@ -24,8 +24,11 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
       throw new Error('المتجر غير متاح أو تم حذفه');
     }
 
-    if (!store.data?.is_active || !store.data.is_open || ['doctors', 'maintenance', 'home'].includes(store.data.category)) {
-      throw new Error('المتجر غير متاح للطلب الآن');
+    const { isStoreCurrentlyOpen } = await import('./store-hours');
+    const workingStatus = isStoreCurrentlyOpen(store.data);
+
+    if (!store.data?.is_active || !workingStatus.isOpen || ['doctors', 'maintenance', 'home'].includes(store.data.category)) {
+      throw new Error(workingStatus.reason || 'المتجر غير متاح للطلب الآن');
     }
 
     // التحقق من وجود دليفري شغال في الوقت الحالي
@@ -172,7 +175,7 @@ export const placeCustomerOrder = createServerFn({ method: 'POST' })
 
 export const createBooking = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator(bookingInput)
+  .validator(bookingInput)
   .handler(async ({ data, context }) => {
     const store = await context.supabase.from('stores').select('id,name,owner_id,category,is_active,is_open').eq('id', data.store_id).single();
     if (!store.data?.is_active || !store.data.is_open || store.data.category !== 'doctors') throw new Error('الطبيب غير متاح للحجز');
@@ -205,7 +208,7 @@ export const createBooking = createServerFn({ method: 'POST' })
 
 export const createServiceRequest = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator(serviceInput)
+  .validator(serviceInput)
   .handler(async ({ data, context }) => {
     const store = await context.supabase.from('stores').select('id,name,owner_id,category,is_active,is_open').eq('id', data.store_id).single();
     if (!store.data?.is_active || !store.data.is_open || !['maintenance', 'home'].includes(store.data.category)) throw new Error('مقدم الخدمة غير متاح');
@@ -262,7 +265,7 @@ export const getCustomerOrders = createServerFn({ method: 'POST' })
 
 export const cancelCustomerRequest = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ kind: z.enum(requestKinds), id: z.string().uuid() }))
+  .validator(z.object({ kind: z.enum(requestKinds), id: z.string().uuid() }))
   .handler(async ({ data, context }) => {
     const row = await context.supabase.from(data.kind).select('store_id,status').eq('id', data.id).eq('customer_id', context.userId).single();
     if (!row.data || !canCustomerCancel(data.kind, row.data.status)) throw new Error('لا يمكن إلغاء الطلب في حالته الحالية');
@@ -325,7 +328,7 @@ export const getNotifications = createServerFn({ method: 'POST' })
 
 export const readNotification = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ id: z.string().uuid().optional() }))
+  .validator(z.object({ id: z.string().uuid().optional() }))
   .handler(async ({ data, context }) => {
     let query = context.supabase.from('notifications').update({ is_read: true }).eq('user_id', context.userId);
     if (data.id) query = query.eq('id', data.id);
@@ -346,7 +349,7 @@ export const getDeliveryAvailability = createServerFn({ method: 'GET' })
 
 export const submitOrderReview = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     z.object({
       orderId: z.string().uuid(),
       storeId: z.string().uuid(),

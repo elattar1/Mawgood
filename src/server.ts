@@ -144,16 +144,39 @@ export default {
         }
 
         // 3. Create user with email_confirm: true (Instant auto-activation, no MX / SMTP bounce)
-        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email: systemEmail,
-          password: password.trim(),
-          email_confirm: true,
-          user_metadata: {
-            full_name: fullName || "مستخدم خدمات الحسينية",
-            phone: cleanPhone,
-            recovery_email: isEmail ? systemEmail : (email?.trim().toLowerCase() || null),
-          },
-        });
+        const e164Phone = cleanPhone ? (cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`) : undefined;
+        let newUser: any = null;
+        let createError: any = null;
+
+        try {
+          const res = await supabaseAdmin.auth.admin.createUser({
+            email: systemEmail,
+            phone: e164Phone,
+            password: password.trim(),
+            email_confirm: true,
+            phone_confirm: true,
+            user_metadata: {
+              full_name: fullName || "مستخدم خدمات الحسينية",
+              phone: cleanPhone,
+              recovery_email: isEmail ? systemEmail : (email?.trim().toLowerCase() || null),
+            },
+          });
+          newUser = res.data;
+          createError = res.error;
+        } catch {
+          const res = await supabaseAdmin.auth.admin.createUser({
+            email: systemEmail,
+            password: password.trim(),
+            email_confirm: true,
+            user_metadata: {
+              full_name: fullName || "مستخدم خدمات الحسينية",
+              phone: cleanPhone,
+              recovery_email: isEmail ? systemEmail : (email?.trim().toLowerCase() || null),
+            },
+          });
+          newUser = res.data;
+          createError = res.error;
+        }
 
         if (createError) {
           const errorMsg = createError.message?.toLowerCase() || "";
@@ -197,8 +220,9 @@ export default {
           JSON.stringify({
             success: true,
             alreadyExists: false,
-            authEmail: systemEmail,
             phone: cleanPhone,
+            identifier: cleanPhone || systemEmail,
+            authEmail: isEmail ? systemEmail : undefined,
           }),
           { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
         );

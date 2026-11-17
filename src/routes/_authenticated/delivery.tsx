@@ -11,12 +11,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { PageTitle, StatusBadge } from "@/components/AppShell";
 import { DeliveryError, DeliveryStat } from "@/components/DeliveryShared";
 import { driverBoardQuery } from "@/lib/delivery-queries";
-import { claimOrder, completeOrder, getDriverBoard, setMyDriverWorkingStatus } from "@/lib/delivery.functions";
+import { claimOrder, completeOrder, getDriverBoard, setMyDriverWorkingStatus, updateDriverLocation } from "@/lib/delivery.functions";
 import { driverWallet } from "@/lib/delivery-rules";
 import { money, dateAr } from "@/lib/labels";
 import { pageMeta } from "@/lib/page-meta";
 import { cleanOrderNotes } from "@/lib/utils";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
+import { LiveDriverTrackingDialog } from "@/components/LiveDriverTrackingDialog";
 import { ChatUnreadBadge } from "@/components/ChatUnreadBadge";
 import { extractCoordinates, cleanDisplayAddress, getGoogleNavigationUrl, getGoogleMapsPinUrl } from "@/lib/map-utils";
 import { playNewOrderAlert } from "@/lib/order-alert";
@@ -49,6 +50,10 @@ function Delivery() {
   const setWorkingStatus = useServerFn(setMyDriverWorkingStatus);
   const [confirm, setConfirm] = useState<DeliveryOrder | null>(null);
   const [chatOrderId, setChatOrderId] = useState<string | null>(chat || null);
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
+  const [lastGpsUpdate, setLastGpsUpdate] = useState<Date | null>(null);
+  const [isGpsBroadcasting, setIsGpsBroadcasting] = useState(false);
+  const broadcastLocation = useServerFn(updateDriverLocation);
 
   useEffect(() => {
     if (chat) {
@@ -70,6 +75,48 @@ function Delivery() {
   const wallet = driverWallet(data.mine);
   const isWorking = !!data.driver?.is_active;
   const { getUnreadCount } = useOrderChatUnreadMap(data.mine);
+
+  // بث إحداثيات موقع الكابتن المباشر للعميل تلقائياً أثناء التوصيل
+  const sendCurrentGps = async (showToast = false) => {
+    if (typeof window === "undefined" || !navigator.geolocation || current.length === 0) return;
+    setIsGpsBroadcasting(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          await Promise.all(
+            current.map((o) => broadcastLocation({ data: { orderId: o.id, lat, lng } }))
+          );
+          setLastGpsUpdate(new Date());
+          if (showToast) {
+            toast.success("تم تحديث موقعك المباشر للعميل بنجاح 📍");
+          }
+        } catch (e) {
+          console.warn("GPS broadcast error:", e);
+        } finally {
+          setIsGpsBroadcasting(false);
+        }
+      },
+      (err) => {
+        setIsGpsBroadcasting(false);
+        if (showToast) {
+          toast.error("تعذر تحديد الموقع الجغرافي؛ تأكد من تفعيل الـ GPS");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+    );
+  };
+
+  // تشغيل البث التلقائي للموقع كل 15 ثانية طالما هناك طلبات قيد التوصيل
+  useEffect(() => {
+    if (current.length === 0) return;
+    void sendCurrentGps(false);
+    const interval = setInterval(() => {
+      void sendCurrentGps(false);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [current.length]);
 
   // تشغيل تنبيه نغمة واهتزاز خفيف عند ظهور طلبات جديدة بالرادار إذا كان السائق شغالاً
   useEffect(() => {
@@ -358,6 +405,29 @@ function Delivery() {
                           الموقع
                         </a>
                       </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 text-xs font-bold gap-1.5 shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30"
+                        onClick={() => setTrackingOrderId(o.id)}
+                        title="معاينة خريطة التتبع المباشرة التي يراها العميل"
+                      >
+                        <Navigation className="size-3.5" />
+                        الخريطة المباشرة 🗺️
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 text-xs font-semibold gap-1 shrink-0"
+                        disabled={isGpsBroadcasting}
+                        onClick={() => sendCurrentGps(true)}
+                        title="إرسال إحداثيات موقعك الحالي فوراً"
+                      >
+                        <RefreshCw className={`size-3.5 ${isGpsBroadcasting ? "animate-spin text-primary" : ""}`} />
+                        تحديث موقعي 📍
+                      </Button>
                     </div>
                   </div>
 
@@ -547,6 +617,14 @@ function Delivery() {
         orderId={chatOrderId}
         open={!!chatOrderId}
         onOpenChange={(open) => !open && setChatOrderId(null)}
+      />
+
+      {/* خريطة تتبع مسار الطلب وموقع الكابتن الحي */}
+      <LiveDriverTrackingDialog
+        orderId={trackingOrderId}
+        open={!!trackingOrderId}
+        onOpenChange={(open) => !open && setTrackingOrderId(null)}
+        onOpenChat={(id) => setChatOrderId(id)}
       />
     </div>
   );
