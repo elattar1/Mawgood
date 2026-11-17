@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { getNotifications, readNotification } from "@/lib/customer.functions";
 import { registerPushDevice } from "@/lib/push.functions";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
+import { IncomingOrderCallDialog } from "@/components/dashboard/IncomingOrderCallDialog";
 import { StoreOrderActionDialog } from "@/components/dashboard/StoreOrderActionDialog";
 import { Button } from "@/components/ui/button";
 import { playCustomerOrderAlert, getCustomerSoundEnabled, playNewOrderAlert } from "@/lib/order-alert";
@@ -71,6 +72,7 @@ export function InAppChatNotifier() {
   const [activeBanners, setActiveBanners] = useState<NotificationBannerItem[]>([]);
   const [openChatOrderId, setOpenChatOrderId] = useState<string | null>(null);
   const [storeActionOrderId, setStoreActionOrderId] = useState<string | null>(null);
+  const [incomingCallOrderId, setIncomingCallOrderId] = useState<string | null>(null);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -304,12 +306,14 @@ export function InAppChatNotifier() {
 
       const isStoreNewOrder = unread.title.includes("طلب جديد") || unread.link?.includes("/provider");
 
-      if (!playedSound) {
-        if (isStoreNewOrder) {
-          qc.invalidateQueries({ queryKey: ['dashboard'] });
-          playNewOrderAlert(true);
-          playedSound = true;
-        } else if (isOrderStatus) {
+      if (isStoreNewOrder) {
+        qc.invalidateQueries({ queryKey: ['dashboard'] });
+        // فتح شاشة مكالمة الطلب الجديد فوراً على الشاشة كاملة مع الرنين المستمر
+        if (extractedOrderId) {
+          setIncomingCallOrderId(extractedOrderId);
+        }
+      } else if (!playedSound) {
+        if (isOrderStatus) {
           qc.invalidateQueries({ queryKey: ['customer-orders'] });
           const soundEnabled = getCustomerSoundEnabled();
           playCustomerOrderAlert(detectedStatus, soundEnabled);
@@ -357,7 +361,7 @@ export function InAppChatNotifier() {
     removeBanner(banner.id, true);
 
     if (banner.isStoreNewOrder && banner.orderId) {
-      setStoreActionOrderId(banner.orderId);
+      setIncomingCallOrderId(banner.orderId);
       return;
     }
 
@@ -521,7 +525,7 @@ export function InAppChatNotifier() {
                       onClick={(e) => {
                         e.stopPropagation();
                         removeBanner(banner.id, false);
-                        setStoreActionOrderId(banner.orderId);
+                        setIncomingCallOrderId(banner.orderId);
                       }}
                       className="h-8 px-3.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm rounded-xl transition-transform active:scale-95"
                     >
@@ -543,11 +547,18 @@ export function InAppChatNotifier() {
         onOpenChange={(open) => !open && setOpenChatOrderId(null)}
       />
 
-      {/* Global Store Order Action Dialog (View details, Accept or Reject) */}
+      {/* Global Store Order Action Dialog (Fallback) */}
       <StoreOrderActionDialog
         orderId={storeActionOrderId}
         open={!!storeActionOrderId}
         onOpenChange={(open) => !open && setStoreActionOrderId(null)}
+      />
+
+      {/* Full-Screen Incoming Phone Call Alert Screen for Store Orders */}
+      <IncomingOrderCallDialog
+        orderId={incomingCallOrderId}
+        open={!!incomingCallOrderId}
+        onOpenChange={(open) => !open && setIncomingCallOrderId(null)}
       />
     </>
   );

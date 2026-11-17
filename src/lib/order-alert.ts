@@ -264,6 +264,82 @@ export function subscribeToKitchenAlarm(callback: (active: boolean, count: numbe
   };
 }
 
+// ----------------------------------------------------
+// نظام رنين مكالمة الطلب الجديد الوارد (Incoming Order Call Ringtone)
+// صوت مكالمة تليفون مستمر + اهتزاز نبضي حتى يقوم المطعم بالرد (قبول أو رفض)
+// ----------------------------------------------------
+let incomingCallTimer: any = null;
+
+export function isIncomingCallRinging(): boolean {
+  return incomingCallTimer !== null;
+}
+
+/**
+ * رنين هاتف متناغم واقعي بنغمتين (440Hz + 480Hz) يتكرر مثل رنين التليفون الحقيقي تماماً
+ */
+export function playPhoneCallCadence() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const ringBursts = [
+      { start: 0, duration: 0.8 },
+      { start: 1.0, duration: 0.8 },
+    ];
+
+    ringBursts.forEach(({ start, duration }) => {
+      [440, 480].forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        gainNode.gain.setValueAtTime(0.001, now + start);
+        gainNode.gain.exponentialRampToValueAtTime(0.25, now + start + 0.05);
+        gainNode.gain.setValueAtTime(0.25, now + start + duration - 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration + 0.05);
+      });
+    });
+  } catch (err) {
+    console.warn("Could not play phone call cadence:", err);
+  }
+}
+
+/**
+ * بدء رنين مكالمة الطلب الجديد واهتزاز الهاتف بشكل مستمر
+ */
+export function startIncomingOrderCallRingtone() {
+  if (incomingCallTimer) return;
+
+  // رنين واهتزاز أولي فوري
+  playPhoneCallCadence();
+  triggerSoftVibration([400, 200, 400, 200, 800]);
+
+  // تكرار الرنين والاهتزاز كل 2.6 ثانية كالمكالمة الواردة
+  incomingCallTimer = setInterval(() => {
+    playPhoneCallCadence();
+    triggerSoftVibration([400, 200, 400, 200, 800]);
+  }, 2600);
+}
+
+/**
+ * إيقاف رنين مكالمة الطلب واهتزاز الهاتف فوراً عند القبول أو الرفض
+ */
+export function stopIncomingOrderCallRingtone() {
+  if (incomingCallTimer) {
+    clearInterval(incomingCallTimer);
+    incomingCallTimer = null;
+  }
+}
+
 /**
  * تشغيل نغمة تنبيه مخصصة للعميل حسب تغير حالة طلبه
  * (قبول وتحضير الطلب / خروج الدليفري / تسليم واكتمال الطلب / إلغاء)

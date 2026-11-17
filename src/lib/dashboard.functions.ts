@@ -282,7 +282,7 @@ export const getStoreOrderActionDetails = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const orderRes = await supabaseAdmin
       .from("orders")
-      .select("id, status, total, subtotal, delivery_fee, address, phone, notes, created_at, store_id, stores(name, owner_id), order_items(name, qty, price)")
+      .select("id, status, total, subtotal, delivery_fee, address, phone, notes, created_at, store_id, customer_id, stores(name, owner_id), order_items(name, qty, price)")
       .eq("id", data.orderId)
       .maybeSingle();
 
@@ -298,6 +298,18 @@ export const getStoreOrderActionDetails = createServerFn({ method: "POST" })
       throw new Error("لا تملك صلاحية عرض هذا الطلب");
     }
 
+    let customerName = "العميل";
+    if (order.customer_id) {
+      const profile = await supabaseAdmin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", order.customer_id)
+        .maybeSingle();
+      if (profile.data?.full_name) {
+        customerName = profile.data.full_name;
+      }
+    }
+
     return {
       id: order.id,
       status: order.status,
@@ -306,6 +318,7 @@ export const getStoreOrderActionDetails = createServerFn({ method: "POST" })
       delivery_fee: order.delivery_fee,
       address: order.address,
       phone: order.phone,
+      customer_name: customerName,
       notes: order.notes,
       created_at: order.created_at,
       store_id: order.store_id,

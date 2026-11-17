@@ -116,4 +116,30 @@ describe("Order Alert System (sound and vibration)", () => {
     setKitchenAlarmEnabled(false);
     expect(getKitchenAlarmEnabled()).toBe(false);
   });
+
+  it("handles incoming order phone call cadence and lifecycle", async () => {
+    const {
+      startIncomingOrderCallRingtone,
+      stopIncomingOrderCallRingtone,
+      isIncomingCallRinging,
+      playPhoneCallCadence,
+    } = await import("@/lib/order-alert");
+
+    expect(isIncomingCallRinging()).toBe(false);
+
+    // Call cadence should execute without error
+    expect(() => playPhoneCallCadence()).not.toThrow();
+
+    // Start ringtone
+    startIncomingOrderCallRingtone();
+    expect(isIncomingCallRinging()).toBe(true);
+
+    // Second call to start while running is a no-op
+    startIncomingOrderCallRingtone();
+    expect(isIncomingCallRinging()).toBe(true);
+
+    // Stop ringtone
+    stopIncomingOrderCallRingtone();
+    expect(isIncomingCallRinging()).toBe(false);
+  });
 });
