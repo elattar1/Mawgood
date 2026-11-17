@@ -252,15 +252,22 @@ export const getCustomerOrders = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const db = context.supabase;
-    const [orders, bookings, services] = await Promise.all([
+    const [orders, bookings, services, userReviews] = await Promise.all([
       db.from('orders').select('*,order_items(*)').eq('customer_id', context.userId).order('created_at', { ascending: false }),
       db.from('bookings').select('*').eq('customer_id', context.userId).order('created_at', { ascending: false }),
       db.from('service_requests').select('*').eq('customer_id', context.userId).order('created_at', { ascending: false }),
+      db.from('reviews').select('store_id').eq('user_id', context.userId),
     ]);
     for (const result of [orders, bookings, services]) {
       if (result.error) throw new Error('تعذر تحميل طلباتك');
     }
-    return { orders: orders.data ?? [], bookings: bookings.data ?? [], services: services.data ?? [] };
+    const reviewedStoreIds = (userReviews.data ?? []).map((r: any) => r.store_id).filter(Boolean);
+    return {
+      orders: orders.data ?? [],
+      bookings: bookings.data ?? [],
+      services: services.data ?? [],
+      reviewedStoreIds,
+    };
   });
 
 export const cancelCustomerRequest = createServerFn({ method: 'POST' })

@@ -5,8 +5,8 @@ import { flows } from '@/lib/dashboard-rules';
 describe('OrderTimelineProgressBar rules & helpers', () => {
   it('provides descriptive headlines for all order stages', () => {
     expect(getStatusHeadline('orders', 'pending')).toContain('في انتظار الموافقة');
-    expect(getStatusHeadline('orders', 'accepted')).toContain('وافق المتجر');
-    expect(getStatusHeadline('orders', 'preparing')).toContain('قيد التحضير والتجهيز');
+    expect(getStatusHeadline('orders', 'accepted')).toContain('تم تأكيد طلبك');
+    expect(getStatusHeadline('orders', 'preparing')).toContain('تم تحضير وتجهيز');
     expect(getStatusHeadline('orders', 'on_the_way')).toContain('مع كابتن التوصيل');
     expect(getStatusHeadline('orders', 'delivered')).toContain('تم تسليم الطلب بنجاح');
     expect(getStatusHeadline('orders', 'cancelled')).toContain('تم إلغاء');
@@ -42,7 +42,7 @@ describe('OrderTimelineProgressBar rules & helpers', () => {
   it('has readable timeline labels for all distinct steps', () => {
     expect(TIMELINE_LABELS['pending']).toBe('قيد المراجعة');
     expect(TIMELINE_LABELS['accepted']).toBe('تم التأكيد');
-    expect(TIMELINE_LABELS['preparing']).toBe('جاري التحضير');
+    expect(TIMELINE_LABELS['preparing']).toBe('تم التحضير');
     expect(TIMELINE_LABELS['on_the_way']).toBe('في الطريق');
     expect(TIMELINE_LABELS['delivered']).toBe('تم التسليم');
   });

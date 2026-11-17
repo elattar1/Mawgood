@@ -6,7 +6,7 @@ import { STATUS_LABELS } from '@/lib/labels';
 export const TIMELINE_LABELS: Record<string, string> = {
   pending: 'قيد المراجعة',
   accepted: 'تم التأكيد',
-  preparing: 'جاري التحضير',
+  preparing: 'تم التحضير',
   on_the_way: 'في الطريق',
   delivered: 'تم التسليم',
   confirmed: 'مؤكد',
@@ -22,9 +22,9 @@ export function getStatusHeadline(kind: RequestKind, status: string): string {
       case 'pending':
         return 'طلبك مرسل للمتجر وفي انتظار الموافقة والبدء ⏳';
       case 'accepted':
-        return 'وافق المتجر على طلبك، وجاري تحويله للتحضير ✅';
+        return 'تم تأكيد طلبك بنجاح من قِبل المتجر ✅';
       case 'preparing':
-        return 'طلبك قيد التحضير والتجهيز الآن في المتجر 🍳';
+        return 'تم تحضير وتجهيز طلبك بنجاح في المتجر 🍳';
       case 'on_the_way':
         return 'الطلب مع كابتن التوصيل وفي الطريق إليك الآن 🛵💨';
       case 'delivered':

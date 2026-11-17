@@ -434,6 +434,22 @@ function Orders() {
                       </div>
                     );
                   }
+
+                  // إذا كان العميل قد وصل لحد التقييمات لهذا المتجر (تم تقييمه مسبقاً في قاعدة البيانات أو محلياً)
+                  const isStoreLimitReached = Boolean(
+                    (data?.reviewedStoreIds && r.store_id && data.reviewedStoreIds.includes(r.store_id)) ||
+                    (typeof window !== 'undefined' && r.store_id && localStorage.getItem('store_reviewed_' + r.store_id))
+                  );
+
+                  if (isStoreLimitReached) {
+                    return (
+                      <div className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground font-semibold">
+                        <Star className="size-3.5 fill-amber-400 text-amber-400" />
+                        <span>تم تقييم هذا المتجر سابقاً ⭐</span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <Button
                       size="sm"

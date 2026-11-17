@@ -78,7 +78,7 @@ export function StoreOrderActionDialog({
         data: {
           kind: "orders",
           id,
-          status: "preparing",
+          status: "accepted",
         },
       });
     },
@@ -88,8 +88,7 @@ export function StoreOrderActionDialog({
       qc.invalidateQueries({ queryKey: ["store-order-action-details", id] });
       qc.invalidateQueries({ queryKey: ["customer-orders"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
-      toast.error("⚠️ تنبيه: التوصيل وتسليم الطلب يتمان من خلال الدليفري فقط", { duration: 8000 });
-      toast.success("✅ تم قبول الطلب وبدء التحضير! تم إيقاف صفارة الإنذار.");
+      toast.success("✅ تم تأكيد وقبول الطلب بنجاح! تم إيقاف صفارة الإنذار.");
       onActionComplete?.();
       onOpenChange(false);
     },
@@ -394,7 +393,7 @@ export function StoreOrderActionDialog({
                       ) : (
                         <Check className="size-5 stroke-[2.5]" />
                       )}
-                      قبول الطلب وبدء التحضير
+                      تأكيد وقبول الطلب
                     </Button>
 
                     <Button

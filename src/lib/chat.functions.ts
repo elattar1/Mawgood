@@ -497,8 +497,8 @@ export async function notifyOrderStatusUpdate(
         message = `قام ${storeName} بتأكيد وقبول طلبك، وبدأ الاستعداد لتجهيزه.`;
         break;
       case "preparing":
-        title = `🍳 طلبك قيد التحضير الآن في ${storeName}`;
-        message = `يقوم ${storeName} بتحضير وتجهيز طلبك الآن بعناية.`;
+        title = `🍳 تم تحضير وتجهيز طلبك في ${storeName}`;
+        message = `قام ${storeName} بالانتهاء من تحضير وتجهيز طلبك بعناية، وهو جاهز لاستلام كابتن التوصيل.`;
         break;
       case "on_the_way":
         const drName = extra?.driverName ? `الكابتن ${extra.driverName}` : "كابتن التوصيل";

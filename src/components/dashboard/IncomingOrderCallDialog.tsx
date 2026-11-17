@@ -65,7 +65,6 @@ export function IncomingOrderCallDialog({
   const getDetails = useServerFn(getStoreOrderActionDetails);
   const doUpdate = useServerFn(updateRequest);
 
-  const [showAcceptWarning, setShowAcceptWarning] = useState(false);
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [selectedReason, setSelectedReason] = useState(REJECTION_REASONS[0]);
   const [customReason, setCustomReason] = useState("");
@@ -77,7 +76,6 @@ export function IncomingOrderCallDialog({
     } else {
       stopIncomingOrderCallRingtone();
       setShowRejectForm(false);
-      setShowAcceptWarning(false);
     }
     return () => {
       stopIncomingOrderCallRingtone();
@@ -103,7 +101,7 @@ export function IncomingOrderCallDialog({
         data: {
           kind: "orders",
           id,
-          status: "preparing",
+          status: "accepted",
         },
       });
     },
@@ -114,9 +112,7 @@ export function IncomingOrderCallDialog({
       qc.invalidateQueries({ queryKey: ["store-order-action-details", id] });
       qc.invalidateQueries({ queryKey: ["customer-orders"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
-      toast.error("⚠️ تنبيه: التوصيل وتسليم الطلب يتمان من خلال الدليفري فقط", { duration: 8000 });
-      toast.success("✅ تم قبول الطلب وبدء التحضير! تم إيقاف رنين المكالمة.");
-      setShowAcceptWarning(false);
+      toast.success("✅ تم تأكيد وقبول الطلب بنجاح! تم إيقاف رنين المكالمة.");
       onActionComplete?.();
       onOpenChange(false);
     },
@@ -158,7 +154,7 @@ export function IncomingOrderCallDialog({
 
   function handleAccept() {
     if (!orderId) return;
-    setShowAcceptWarning(true);
+    acceptMutation.mutate(orderId);
   }
 
   function handleRejectConfirm() {
@@ -339,54 +335,9 @@ export function IncomingOrderCallDialog({
         )}
       </div>
 
-      {/* Bottom Section: Call Action Buttons, Accept Warning, or Rejection Form */}
+      {/* Bottom Section: Call Action Buttons or Rejection Form */}
       <div className="w-full max-w-lg mx-auto pb-4 sm:pb-6 shrink-0">
-        {showAcceptWarning ? (
-          /* Red Warning Confirmation Banner: التوصيل وتسليم الطلب يتمان من خلال الدليفري فقط */
-          <div className="p-4 sm:p-5 rounded-3xl bg-rose-950/95 border-2 border-rose-500 backdrop-blur-2xl text-center space-y-3.5 animate-in fade-in zoom-in-95 shadow-2xl">
-            <div className="flex items-center justify-center gap-2 text-rose-300 font-black text-sm sm:text-base">
-              <AlertCircle className="size-6 text-rose-400 animate-bounce" />
-              <span>تنبيه هام ومؤكد للمحل</span>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-rose-900/70 border border-rose-500/50 shadow-inner">
-              <p className="text-white text-base sm:text-lg font-black leading-relaxed">
-                ⚠️ التوصيل وتسليم الطلب يتمان من خلال الدليفري فقط
-              </p>
-              <p className="text-rose-200 text-xs mt-1 font-semibold">
-                المحل مسؤول فقط عن تجهيز وتغليف الأصناف وتسليمها لكابتن المنظومة عند وصوله.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 pt-1">
-              <Button
-                type="button"
-                disabled={isBusy}
-                onClick={() => {
-                  if (orderId) acceptMutation.mutate(orderId);
-                }}
-                className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm gap-2 rounded-2xl shadow-lg transition-transform active:scale-95"
-              >
-                {acceptMutation.isPending ? (
-                  <Loader2 className="size-5 animate-spin" />
-                ) : (
-                  <Check className="size-5 stroke-[2.5]" />
-                )}
-                فهمت، قبول وبدء التحضير
-              </Button>
-
-              <Button
-                type="button"
-                disabled={isBusy}
-                variant="ghost"
-                onClick={() => setShowAcceptWarning(false)}
-                className="h-12 px-4 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/10 rounded-2xl"
-              >
-                تراجع
-              </Button>
-            </div>
-          </div>
-        ) : showRejectForm ? (
+        {showRejectForm ? (
           /* Rejection Reason Form with custom reason input */
           <div className="p-4 sm:p-5 rounded-3xl bg-rose-950/80 border-2 border-rose-500/40 backdrop-blur-2xl space-y-3 animate-in fade-in slide-in-from-bottom-4 shadow-2xl">
             <div className="flex items-center gap-2 text-rose-300 font-black text-sm">
@@ -476,7 +427,7 @@ export function IncomingOrderCallDialog({
                 type="button"
                 disabled={isBusy}
                 onClick={handleAccept}
-                aria-label="قبول الطلب وبدء التحضير"
+                aria-label="تأكيد وقبول الطلب"
                 className="relative size-20 sm:size-24 rounded-full bg-emerald-500 hover:bg-emerald-600 active:scale-90 text-white flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.8)] border-4 border-emerald-400/50 transition-all animate-bounce"
               >
                 <span className="absolute inset-0 rounded-full ring-4 ring-emerald-400/40 animate-ping" />
@@ -487,7 +438,7 @@ export function IncomingOrderCallDialog({
                 )}
               </button>
               <span className="font-black text-xs sm:text-sm text-emerald-400 tracking-wide">
-                قبول وبدء التحضير
+                تأكيد وقبول الطلب
               </span>
             </div>
           </div>

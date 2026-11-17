@@ -2244,18 +2244,23 @@ export function Dashboard({
                     type="button"
                     disabled={busy}
                     onClick={() => {
+                      const nextStatus = currentDetail.status === "pending" ? "accepted" : "preparing";
                       execute(
                         () =>
                           doUpdate({
                             data: {
                               id: currentDetail.id,
                               kind: "orders",
-                              status: "preparing",
+                              status: nextStatus,
                             },
                           }),
                         () => {
                           stopKitchenAlarm(currentDetail.id);
-                          toast.success("✅ تم قبول الطلب وبدء التحضير! تم إيقاف صفارة الإنذار.");
+                          toast.success(
+                            nextStatus === "accepted"
+                              ? "✅ تم تأكيد وقبول الطلب بنجاح!"
+                              : "✅ تم تأكيد تجهيز وتحضير الطلب وجاهزيته للتوصيل!"
+                          );
                           setDetail(null);
                         }
                       );
@@ -2263,7 +2268,7 @@ export function Dashboard({
                     className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm gap-2 rounded-2xl shadow-md transition-transform active:scale-95"
                   >
                     <Check className="size-5 stroke-[2.5]" />
-                    قبول وبدء التحضير
+                    {currentDetail.status === "pending" ? "تأكيد وقبول الطلب" : "تم التحضير"}
                   </Button>
 
                   <Button

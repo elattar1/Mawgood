@@ -59,6 +59,9 @@ export function OrderReviewDialog({
               driverRating: hasDriver ? driverRating : null,
             })
           );
+          if (storeId) {
+            localStorage.setItem(`store_reviewed_${storeId}`, "true");
+          }
         } catch {}
       }
       qc.invalidateQueries({ queryKey: ["customer-orders"] });
@@ -68,7 +71,21 @@ export function OrderReviewDialog({
       onReviewed?.();
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "تعذر إرسال التقييم");
+      const msg = err instanceof Error ? err.message : "تعذر إرسال التقييم";
+      if (msg.includes("مؤخراً") && storeId) {
+        try {
+          localStorage.setItem(`store_reviewed_${storeId}`, "true");
+          if (orderId) {
+            localStorage.setItem(
+              `order_reviewed_${orderId}`,
+              JSON.stringify({ storeRating: 5 })
+            );
+          }
+        } catch {}
+        qc.invalidateQueries({ queryKey: ["customer-orders"] });
+        onOpenChange(false);
+      }
+      toast.error(msg);
     },
   });
 
