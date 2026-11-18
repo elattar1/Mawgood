@@ -1,12 +1,25 @@
 export type PushResult = { status: 'registered'; token: string } | { status: 'not-configured' | 'unsupported' | 'open-in-new-tab' | 'denied' };
 
 export async function enablePush(): Promise<PushResult> {
-  const appId = import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_APP_ID'];
-  const vapidKey = import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_VAPID_KEY'];
+  const appId =
+    import.meta.env['VITE_FIREBASE_APP_ID'] ||
+    import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_APP_ID'] ||
+    '1:797533188146:web:1115fe04e3ed7fb7788c2b';
+  const vapidKey =
+    import.meta.env['VITE_FIREBASE_VAPID_KEY'] ||
+    import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_VAPID_KEY'] ||
+    'BCDXWmdEJxSEb39foJSIKrLcddpOH9lZ9kSIKn1f6jbTxQ66vtFmGNZmgjQYczd1j9qKkFWmUZcYk9EQruKR6Wc';
   const config = {
-    apiKey: import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_WEB_API_KEY'],
-    projectId: import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_PROJECT_ID'],
-    appId, messagingSenderId: appId?.split(':')[1] ?? '',
+    apiKey:
+      import.meta.env['VITE_FIREBASE_API_KEY'] ||
+      import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_WEB_API_KEY'] ||
+      'AIzaSyBgINPoWluExPq-HtpjVbLVqaxMiuiw9JY',
+    projectId:
+      import.meta.env['VITE_FIREBASE_PROJECT_ID'] ||
+      import.meta.env['VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_PROJECT_ID'] ||
+      'mawgood1',
+    appId,
+    messagingSenderId: appId?.split(':')[1] ?? '797533188146',
   };
   if (!config.apiKey || !config.projectId || !appId || !vapidKey || !config.messagingSenderId) return { status: 'not-configured' };
   if (window.top !== window.self) return { status: 'open-in-new-tab' };
@@ -25,7 +38,7 @@ export async function enablePush(): Promise<PushResult> {
     });
   });
   const { initializeApp, getApps } = await import('firebase/app');
-  const app = getApps().find(a => a.name === 'husayniya-messaging') ?? initializeApp(config, 'husayniya-messaging');
+  const app = getApps().find(a => a.name === 'mawgood-messaging') ?? initializeApp(config, 'mawgood-messaging');
   const messaging = getMessaging(app);
   const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
   if (!token) return { status: 'denied' };
