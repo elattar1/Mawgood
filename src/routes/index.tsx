@@ -1,6 +1,6 @@
 import type { SearchSchemaInput } from '@tanstack/react-router';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { Search, MapPin, ArrowLeft, Star, Clock3, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,11 @@ export const Route = createFileRoute('/')({
 });
 
 function Browse() {
-  const { data } = useSuspenseQuery(catalogQuery);
+  const initialData = Route.useLoaderData();
+  const { data = initialData } = useQuery({
+    ...catalogQuery,
+    initialData,
+  });
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { appMode } = useAuth();
