@@ -82,9 +82,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="glass-top-header sticky top-0 z-40 border-b">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-2">
-            <Link to="/" className="flex items-center gap-2">
-              <img src="/icon-512.png" alt="" className="h-10 w-10 rounded-xl object-cover" />
-              <span className="font-display text-lg text-primary font-bold">موجود</span>
+            <Link to="/" className="flex items-center py-1 transition-opacity hover:opacity-90" aria-label="الرئيسية - موجود">
+              <img
+                src="/header-logo.png"
+                alt="موجود"
+                className="h-11 sm:h-12 w-auto max-w-[170px] sm:max-w-[210px] object-contain object-right"
+              />
             </Link>
 
             {modeBadge && (
