@@ -337,14 +337,13 @@ export function InAppChatNotifier() {
         (unread.link && unread.link.includes("chat="));
 
       const isStoreNewOrder =
-        (unread.title.includes("طلب جديد") ||
-         unread.body.includes("طلب جديد") ||
-         (unread.link && (unread.link.includes("order=") || unread.link.includes("/provider")))) &&
+        (unread.title.includes("طلب جديد") || unread.body.includes("طلب جديد")) &&
+        !isOrderStatus &&
         !isChat;
 
       if (isStoreNewOrder) {
         qc.invalidateQueries({ queryKey: ['dashboard'] });
-        // فتح شاشة مكالمة الطلب الجديد فوراً على الشاشة كاملة مع الرنين المستمر
+        // فتح شاشة مكالمة الطلب الجديد فقط إذا كان الطلب معلقاً (Pending) ولم يتم قبوله بعد
         let targetOrderId = extractedOrderId;
         if (!targetOrderId) {
           const uuidMatch = (unread.link || unread.body || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
@@ -353,18 +352,14 @@ export function InAppChatNotifier() {
           }
         }
         if (targetOrderId) {
-          setIncomingCallOrderId(targetOrderId);
-        } else {
           void supabase
             .from('orders')
-            .select('id')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false })
-            .limit(1)
+            .select('id, status')
+            .eq('id', targetOrderId)
             .maybeSingle()
             .then((res) => {
-              if (res.data?.id) {
-                setIncomingCallOrderId(res.data.id);
+              if (res.data?.status === 'pending') {
+                setIncomingCallOrderId(targetOrderId);
               }
             });
         }

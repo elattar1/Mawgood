@@ -94,6 +94,14 @@ export function IncomingOrderCallDialog({
     enabled: !!orderId && open,
   });
 
+  // Auto-close telephone call dialog if order is already accepted, on the way, or completed
+  useEffect(() => {
+    if (open && order && order.status !== "pending") {
+      stopIncomingOrderCallRingtone();
+      onOpenChange(false);
+    }
+  }, [open, order?.status, onOpenChange]);
+
   // Accept mutation
   const acceptMutation = useMutation({
     mutationFn: async (id: string) => {
