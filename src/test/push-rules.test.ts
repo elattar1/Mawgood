@@ -15,7 +15,10 @@ describe('push delivery rules', () => {
     expect(isStalePushToken(429, 'RESOURCE_EXHAUSTED')).toBe(false);
     expect(isStalePushToken(503, 'UNAVAILABLE')).toBe(false);
   });
-  it('removes invalid device tokens', () => { expect(isStalePushToken(400, 'INVALID_ARGUMENT')).toBe(true); });
+  it('removes invalid or mismatched device tokens', () => {
+    expect(isStalePushToken(400, 'INVALID_ARGUMENT')).toBe(true);
+    expect(isStalePushToken(403, 'SENDER_ID_MISMATCH')).toBe(true);
+  });
 
   it('formats order push notification payload with merchant direct link and stay-on-screen interaction', () => {
     const payload = formatOrderPushPayload({
