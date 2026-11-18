@@ -73,7 +73,8 @@ function translateAuthError(err: unknown): string {
     msg.includes("missing OAuth secret") ||
     msg.includes("Unsupported provider") ||
     msg.includes("validation_failed") ||
-    msg.includes("OAuth secret")
+    msg.includes("OAuth secret") ||
+    msg.includes("provider is not enabled")
   ) {
     return "خدمة الدخول بحساب Google بانتظار إضافة مفتاح (OAuth Secret) في لوحة التحكم. يمكنك تسجيل الدخول فوراً وبكل سهولة برقم التليفون أو البريد الإلكتروني أدناه.";
   }
@@ -338,14 +339,11 @@ function Auth() {
     setSuccessMsg("");
     try {
       const redirectUri = `${window.location.origin}/auth?redirect=${encodeURIComponent(redirect)}`;
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: redirectUri });
-      if (result?.error) {
-        const supRes = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: redirectUri },
-        });
-        if (supRes.error) throw supRes.error;
-      }
+      const { error: supErr } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: redirectUri },
+      });
+      if (supErr) throw supErr;
     } catch (err) {
       setError(translateAuthError(err));
     } finally {
