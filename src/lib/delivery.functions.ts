@@ -3,7 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { driverInput } from "./delivery-rules";
 
-const orderSelect = "id, status, total, subtotal, delivery_fee, address, phone, notes, area_id, created_at, picked_up_at, delivered_at, driver_id, order_items(name, qty, price), stores(name, phone, address, area_id)";
+const orderSelect = "id, customer_id, status, total, subtotal, delivery_fee, address, phone, notes, area_id, created_at, picked_up_at, delivered_at, driver_id, order_items(name, qty, price), stores(name, phone, address, area_id)";
 
 export const getDriverBoard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -20,7 +20,43 @@ export const getDriverBoard = createServerFn({ method: "POST" })
       db.from("areas").select("*"),
     ]);
     for (const r of [available, mine, areas]) if (r.error) throw new Error(r.error.message);
-    return { driver: me.data, available: available.data ?? [], mine: mine.data ?? [], areas: areas.data ?? [] };
+
+    const rawAvailable = (available.data ?? []) as any[];
+    const rawMine = (mine.data ?? []) as any[];
+
+    const customerIds = Array.from(
+      new Set([...rawAvailable, ...rawMine].map((o) => o.customer_id).filter(Boolean))
+    );
+    const profilesMap = new Map<string, string>();
+    if (customerIds.length > 0) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: profs } = await supabaseAdmin
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", customerIds);
+        if (profs) {
+          profs.forEach((p) => {
+            if (p.full_name) profilesMap.set(p.id, p.full_name);
+          });
+        }
+      } catch (e) {
+        console.warn("Could not fetch customer profiles for delivery board:", e);
+      }
+    }
+
+    const attachCustomer = (orderList: any[]) =>
+      orderList.map((o) => ({
+        ...o,
+        customer_name: profilesMap.get(o.customer_id) || "العميل",
+      }));
+
+    return {
+      driver: me.data,
+      available: attachCustomer(rawAvailable),
+      mine: attachCustomer(rawMine),
+      areas: areas.data ?? [],
+    };
   });
 
 export const setMyDriverWorkingStatus = createServerFn({ method: "POST" })

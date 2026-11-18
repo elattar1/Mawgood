@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCheck, MapPin, Phone, RefreshCw, Store, Truck, Wallet, PackageOpen, Navigation, Volume2, VolumeX, Radio, Power, PowerOff, AlertCircle, MessageCircle } from "lucide-react";
+import { CheckCheck, MapPin, Phone, RefreshCw, Store, Truck, Wallet, PackageOpen, Navigation, Volume2, VolumeX, Radio, Power, PowerOff, AlertCircle, MessageCircle, User } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -367,11 +367,15 @@ function Delivery() {
                   {/* تفاصيل عنوان العميل والملاحة */}
                   <div className="my-3 rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2 text-sm">
+                      <div className="flex items-start gap-2.5 text-sm">
                         <MapPin className="size-4 shrink-0 text-primary mt-0.5" />
-                        <div>
-                          <span className="font-bold text-foreground break-words">{cleanDisplayAddress(o.address)}</span>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{data.areas.find(a => a.id === o.area_id)?.name}</p>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 font-bold text-foreground">
+                            <User className="size-3.5 text-primary shrink-0" />
+                            <span>{(o as any).customer_name || "العميل"}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground break-words">{cleanDisplayAddress(o.address)}</p>
+                          <p className="text-[11px] text-muted-foreground">{data.areas.find(a => a.id === o.area_id)?.name}</p>
                           {extractCoordinates(o.address) && (
                             <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">
                               موقع محدد بدقة على الخريطة 📍
@@ -382,8 +386,8 @@ function Delivery() {
                     </div>
 
                     {/* أزرار تتبع المسار والملاحة في خرائط جوجل */}
-                    <div className="pt-2 border-t border-primary/20 flex flex-col sm:flex-row gap-2">
-                      <Button asChild variant="default" size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 shadow-sm h-9">
+                    <div className="pt-2 border-t border-primary/20 flex flex-wrap items-center gap-2">
+                      <Button asChild variant="default" size="sm" className="flex-1 min-w-[140px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 shadow-sm h-9">
                         <a
                           href={getGoogleNavigationUrl(o.address, o.stores?.address)}
                           target="_blank"
@@ -391,18 +395,7 @@ function Delivery() {
                           title="بدء الملاحة وتتبع مسار القيادة في خرائط جوجل"
                         >
                           <Navigation className="size-4" />
-                          تتبع المسار في خرائط جوجل
-                        </a>
-                      </Button>
-                      <Button asChild variant="outline" size="sm" className="h-9 text-xs font-semibold gap-1.5 shrink-0">
-                        <a
-                          href={getGoogleMapsPinUrl(o.address)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="عرض موقع العميل فقط على الخريطة"
-                        >
-                          <MapPin className="size-3.5" />
-                          الموقع
+                          تتبع المسار
                         </a>
                       </Button>
                       <Button
@@ -414,19 +407,18 @@ function Delivery() {
                         title="معاينة خريطة التتبع المباشرة التي يراها العميل"
                       >
                         <Navigation className="size-3.5" />
-                        الخريطة المباشرة 🗺️
+                        الموقع المباشر
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 text-xs font-semibold gap-1 shrink-0"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 mr-auto"
                         disabled={isGpsBroadcasting}
                         onClick={() => sendCurrentGps(true)}
-                        title="إرسال إحداثيات موقعك الحالي فوراً"
+                        title="تحديث موقعي المباشر الآن"
                       >
-                        <RefreshCw className={`size-3.5 ${isGpsBroadcasting ? "animate-spin text-primary" : ""}`} />
-                        تحديث موقعي 📍
+                        <RefreshCw className={`size-4 ${isGpsBroadcasting ? "animate-spin text-primary" : ""}`} />
                       </Button>
                     </div>
                   </div>
@@ -537,11 +529,15 @@ function Delivery() {
 
                 <div className="my-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 text-sm">
+                    <div className="flex items-start gap-2.5 text-sm">
                       <MapPin className="size-4 shrink-0 text-primary mt-0.5" />
-                      <div>
-                        <span className="font-semibold text-foreground break-words">{cleanDisplayAddress(o.address)}</span>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{data.areas.find(a => a.id === o.area_id)?.name}</p>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 font-bold text-foreground">
+                          <User className="size-3.5 text-primary shrink-0" />
+                          <span>{(o as any).customer_name || "العميل"}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground break-words">{cleanDisplayAddress(o.address)}</p>
+                        <p className="text-[11px] text-muted-foreground">{data.areas.find(a => a.id === o.area_id)?.name}</p>
                         {extractCoordinates(o.address) && (
                           <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 rounded-full font-mono">
                             موقع محدد على الخريطة 📍
