@@ -364,8 +364,8 @@ function Auth() {
       <div className="rounded-2xl border bg-card p-6 shadow-soft sm:p-8">
         {/* الشعار والعنوان الرئيسي */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 w-56 sm:w-64 max-w-full overflow-hidden rounded-2xl shadow-md border border-white/20">
-            <img src="/logo-wide.png" alt="موجود | Mawgood" className="w-full h-auto object-cover" />
+          <div className="mb-4 w-52 sm:w-60 max-w-full flex items-center justify-center">
+            <img src="/auth-logo.png" alt="موجود | Mawgood" className="w-full h-auto object-contain" />
           </div>
           <h1 className="text-2xl font-bold md:text-3xl">موجود | Mawgood</h1>
           <p className="mt-1 text-xs text-muted-foreground">
