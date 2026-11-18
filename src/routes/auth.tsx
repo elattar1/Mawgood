@@ -364,8 +364,8 @@ function Auth() {
       <div className="rounded-2xl border bg-card p-6 shadow-soft sm:p-8">
         {/* الشعار والعنوان الرئيسي */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-            <Store size={28} />
+          <div className="mb-3 size-16 overflow-hidden rounded-2xl shadow-sm border border-border">
+            <img src="/logo.png" alt="موجود" className="size-full object-cover" />
           </div>
           <h1 className="text-2xl font-bold md:text-3xl">موجود | Mawgood</h1>
           <p className="mt-1 text-xs text-muted-foreground">
