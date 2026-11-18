@@ -22,8 +22,8 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_CROP',
     },
     StatusBar: {
-      backgroundColor: '#011248',
-      style: 'DARK',
+      backgroundColor: '#ffffff',
+      style: 'LIGHT',
     },
   },
 };
