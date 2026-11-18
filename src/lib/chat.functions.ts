@@ -156,35 +156,44 @@ export const getOrderChat = createServerFn({ method: "POST" })
       }
     }
 
-    // Attempt to load messages from order_messages table or fallback from notes
-    let rawMessages: ChatMessage[] = [];
+    // Load and merge messages from order.notes and order_messages table
+    const notesParsed = parseMessagesFromNotes(order.notes);
+    const messagesMap = new Map<string, ChatMessage>();
+
+    for (const m of notesParsed.messages) {
+      messagesMap.set(m.id, m);
+    }
+
     try {
       const tblRes = await (supabaseAdmin.from("order_messages" as any) as any)
         .select("*")
         .eq("order_id", data.orderId)
         .order("created_at", { ascending: true });
 
-      if (!tblRes.error && Array.isArray(tblRes.data) && tblRes.data.length > 0) {
-        rawMessages = tblRes.data.map((m: any) => ({
-          id: String(m.id),
-          order_id: String(m.order_id),
-          sender_id: String(m.sender_id),
-          sender_role: m.sender_role as "customer" | "store" | "driver" | "admin",
-          sender_name: String(m.sender_name),
-          message: String(m.message),
-          created_at: String(m.created_at),
-          stage: m.stage || (m.sender_role === "driver" ? "driver" : m.sender_role === "store" ? "store" : undefined),
-          is_read: m.is_read !== undefined ? Boolean(m.is_read) : Boolean(m.read_at),
-          read_at: m.read_at || null,
-        }));
-      } else {
-        const parsed = parseMessagesFromNotes(order.notes);
-        rawMessages = parsed.messages;
+      if (!tblRes.error && Array.isArray(tblRes.data)) {
+        for (const m of tblRes.data) {
+          const existing = messagesMap.get(String(m.id));
+          messagesMap.set(String(m.id), {
+            id: String(m.id),
+            order_id: String(m.order_id),
+            sender_id: String(m.sender_id),
+            sender_role: m.sender_role as "customer" | "store" | "driver" | "admin",
+            sender_name: String(m.sender_name),
+            message: String(m.message),
+            created_at: String(m.created_at),
+            stage: m.stage || (m.sender_role === "driver" ? "driver" : m.sender_role === "store" ? "store" : undefined),
+            is_read: existing ? existing.is_read : (m.is_read !== undefined ? Boolean(m.is_read) : Boolean(m.read_at)),
+            read_at: existing ? existing.read_at : (m.read_at || null),
+          });
+        }
       }
-    } catch {
-      const parsed = parseMessagesFromNotes(order.notes);
-      rawMessages = parsed.messages;
+    } catch (e) {
+      console.warn("Could not read order_messages table, relying on order.notes:", e);
     }
+
+    const rawMessages: ChatMessage[] = Array.from(messagesMap.values()).sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
 
     // Auto-mark incoming messages from other parties as read when opening chat
     const isCompleted = order.status === "delivered" || order.status === "completed";
@@ -379,9 +388,10 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
         message: newMessage.message,
         created_at: newMessage.created_at,
         stage: newMessage.stage,
-        is_read: false,
       });
-    } catch {}
+    } catch (e) {
+      console.warn("Failed to insert into order_messages table, fallback to notes:", e);
+    }
 
     // 2. Always guarantee persistence in order notes for cross-platform reliability
     try {
