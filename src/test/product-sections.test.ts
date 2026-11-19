@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupProductsBySection, suggestedSectionsFor } from "@/lib/product-sections";
+import { groupProductsBySection, suggestedSectionsFor, validateProductSectionOwnership } from "@/lib/product-sections";
 import { productInput, sectionInput } from "@/lib/dashboard-rules";
 
 describe("store product sections", () => {
@@ -41,5 +41,15 @@ describe("store product sections", () => {
     expect(productInput.parse({ ...base, section_id: "" }).section_id).toBeNull();
     expect(sectionInput.safeParse({ ...base, name: "أ" }).success).toBe(false);
     expect(sectionInput.parse({ store_id: base.store_id, name: "المشروبات", sort_order: 20 }).name).toBe("المشروبات");
+  });
+
+  it("validates that a product section belongs to the same store", () => {
+    const storeA = "11111111-1111-4111-8111-111111111111";
+    const storeB = "22222222-2222-4222-8222-222222222222";
+
+    expect(validateProductSectionOwnership(storeA, storeA)).toBe(true);
+    expect(validateProductSectionOwnership(storeB, storeA)).toBe(false);
+    expect(validateProductSectionOwnership(null, storeA)).toBe(false);
+    expect(validateProductSectionOwnership(undefined, storeA)).toBe(false);
   });
 });

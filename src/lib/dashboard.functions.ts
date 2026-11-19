@@ -22,7 +22,7 @@ import {
   findTemplateItem,
   ALL_TEMPLATE_GROUPS,
 } from "./template-catalogs";
-import { suggestedSectionsFor } from "./product-sections";
+import { suggestedSectionsFor, validateProductSectionOwnership } from "./product-sections";
 import { REAL_STORES, REAL_SECTIONS, REAL_PRODUCTS } from "./real-stores-data";
 
 export const getDashboard = createServerFn({ method: "POST" })
@@ -522,6 +522,20 @@ export const saveProduct = createServerFn({ method: "POST" })
 
     const dbClient = isAdmin ? supabaseAdmin : context.supabase;
     const { id, ...values } = data;
+
+    // التحقق من أن القسم المختار يتبع لنفس هذا المتجر منعاً للربط العشوائي أو التداخل
+    if (values.section_id) {
+      const secCheck = await dbClient
+        .from("store_sections")
+        .select("id, store_id")
+        .eq("id", values.section_id)
+        .maybeSingle();
+
+      if (!secCheck.data || !validateProductSectionOwnership(secCheck.data.store_id, data.store_id)) {
+        throw new Error("القسم المختار لا ينتمي لهذا المتجر");
+      }
+    }
+
     const result = id
       ? await dbClient
           .from("products")

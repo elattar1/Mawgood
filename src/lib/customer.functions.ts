@@ -452,6 +452,23 @@ export const submitCustomerComplaint = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
 
+    // 0. حماية من الإغراق والرسائل التكرارية (Cooldown: دقيقتان)
+    try {
+      const recent = await supabaseAdmin
+        .from('complaints_suggestions' as any)
+        .select('id, created_at')
+        .eq('user_id', context.userId)
+        .gte('created_at', new Date(Date.now() - 2 * 60 * 1000).toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (recent.data) {
+        throw new Error('يرجى الانتظار دقيقتين قبل إرسال رسالة أو شكوى أخرى.');
+      }
+    } catch (chkErr: any) {
+      if (chkErr?.message?.includes('دقيقتين')) throw chkErr;
+    }
+
     // 1. Try inserting directly into complaints_suggestions if table exists
     let complaintSaved = false;
     try {
@@ -526,6 +543,23 @@ export const submitDriverApplication = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
 
+    // 0. منع تكرار طلبات الانضمام المتتالية (Cooldown: 15 دقيقة)
+    try {
+      const recent = await supabaseAdmin
+        .from('driver_applications' as any)
+        .select('id, created_at')
+        .eq('user_id', context.userId)
+        .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (recent.data) {
+        throw new Error('لديك طلب انضمام قيد المراجعة تم إرساله مؤخرًا، سنتواصل معك هاتفياً قريباً.');
+      }
+    } catch (chkErr: any) {
+      if (chkErr?.message?.includes('قيد المراجعة')) throw chkErr;
+    }
+
     // 1. Try inserting directly into driver_applications if table exists
     let driverSaved = false;
     try {
@@ -596,6 +630,23 @@ export const submitMerchantApplication = createServerFn({ method: 'POST' })
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+    // 0. منع تكرار طلبات إضافة المتاجر المتتالية (Cooldown: 15 دقيقة)
+    try {
+      const recent = await supabaseAdmin
+        .from('merchant_applications' as any)
+        .select('id, created_at')
+        .eq('user_id', context.userId)
+        .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (recent.data) {
+        throw new Error('لديك طلب إضافة نشاط تجاري قيد المراجعة تم إرساله مؤخرًا، سيتم التواصل معك قريباً.');
+      }
+    } catch (chkErr: any) {
+      if (chkErr?.message?.includes('قيد المراجعة')) throw chkErr;
+    }
 
     // 1. Try inserting directly into merchant_applications if table exists
     let merchantSaved = false;

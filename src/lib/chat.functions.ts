@@ -395,10 +395,14 @@ export const sendOrderChatMessage = createServerFn({ method: "POST" })
 
     // 2. Always guarantee persistence in order notes for cross-platform reliability
     try {
-      const { cleanNotes, messages } = parseMessagesFromNotes(order.notes);
-      const updatedMessages = [...messages, newMessage];
-      const serialized = serializeMessagesToNotes(cleanNotes, updatedMessages);
-      await supabaseAdmin.from("orders").update({ notes: serialized }).eq("id", data.orderId);
+      const freshOrder = await supabaseAdmin.from("orders").select("notes").eq("id", data.orderId).maybeSingle();
+      const currentNotes = freshOrder.data?.notes ?? order.notes;
+      const { cleanNotes, messages } = parseMessagesFromNotes(currentNotes);
+      if (!messages.some((m) => m.id === newMessage.id)) {
+        const updatedMessages = [...messages, newMessage];
+        const serialized = serializeMessagesToNotes(cleanNotes, updatedMessages);
+        await supabaseAdmin.from("orders").update({ notes: serialized }).eq("id", data.orderId);
+      }
     } catch (e) {
       console.error("Failed to update order notes with new message:", e);
     }

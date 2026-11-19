@@ -50,3 +50,12 @@ export function groupProductsBySection<T extends SectionedProduct>(
   }
   return groups;
 }
+
+/** التحقق من تطابق ملكية القسم مع نفس المتجر المخصص للمنتج */
+export function validateProductSectionOwnership(
+  sectionStoreId: string | null | undefined,
+  productStoreId: string,
+): boolean {
+  if (!sectionStoreId || !productStoreId) return false;
+  return sectionStoreId === productStoreId;
+}

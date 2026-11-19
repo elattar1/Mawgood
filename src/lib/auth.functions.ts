@@ -49,10 +49,6 @@ const registerPhoneInput = z.object({
   email: z.string().trim().email("البريد الإلكتروني غير صحيح").optional().or(z.literal("")),
 });
 
-const resolveInput = z.object({
-  identifier: z.string().trim().min(2, "يرجى إدخال الاسم أو رقم التليفون أو البريد"),
-});
-
 const resetInput = z.object({
   identifier: z.string().trim().min(3, "يرجى إدخال رقم التليفون أو البريد الإلكتروني المسجل"),
   redirectUrl: z.string().optional(),
@@ -293,23 +289,56 @@ export const loginWithIdentifier = createServerFn({ method: "POST" })
     }
 
     try {
-      const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const users = list.data?.users ?? [];
-      const e164 = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+      // 1.1 مطابقة سريعة ومفهرسة في جدول profiles بدون حد الـ 1000 مستخدم
+      if (cleanPhone.length >= 8) {
+        const profMatch = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("phone", cleanPhone)
+          .maybeSingle();
 
-      const matchedUser = users.find((u) => {
-        const uPhone = u.user_metadata?.phone || u.phone;
-        const uRecEmail = u.user_metadata?.recovery_email?.toLowerCase();
-        const uName = u.user_metadata?.full_name?.trim();
-        return (
-          (cleanPhone.length >= 8 && (uPhone === cleanPhone || uPhone === e164)) ||
-          (raw.includes("@") && (u.email?.toLowerCase() === raw.toLowerCase() || uRecEmail === raw.toLowerCase())) ||
-          (raw.length >= 3 && uName === raw)
-        );
-      });
+        if (profMatch.data?.id) {
+          const u = await supabaseAdmin.auth.admin.getUserById(profMatch.data.id);
+          if (u.data?.user?.email && !candidateEmails.includes(u.data.user.email)) {
+            candidateEmails.unshift(u.data.user.email);
+          }
+        }
+      } else if (raw.length >= 3 && !raw.includes("@")) {
+        const nameMatch = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("full_name", raw)
+          .limit(1)
+          .maybeSingle();
 
-      if (matchedUser?.email && !candidateEmails.includes(matchedUser.email)) {
-        candidateEmails.unshift(matchedUser.email);
+        if (nameMatch.data?.id) {
+          const u = await supabaseAdmin.auth.admin.getUserById(nameMatch.data.id);
+          if (u.data?.user?.email && !candidateEmails.includes(u.data.user.email)) {
+            candidateEmails.unshift(u.data.user.email);
+          }
+        }
+      }
+
+      // 1.2 كخيار احتياطي: فحص قائمة المستخدمين
+      if (candidateEmails.length === 0) {
+        const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const users = list.data?.users ?? [];
+        const e164 = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+
+        const matchedUser = users.find((u) => {
+          const uPhone = u.user_metadata?.phone || u.phone;
+          const uRecEmail = u.user_metadata?.recovery_email?.toLowerCase();
+          const uName = u.user_metadata?.full_name?.trim();
+          return (
+            (cleanPhone.length >= 8 && (uPhone === cleanPhone || uPhone === e164)) ||
+            (raw.includes("@") && (u.email?.toLowerCase() === raw.toLowerCase() || uRecEmail === raw.toLowerCase())) ||
+            (raw.length >= 3 && uName === raw)
+          );
+        });
+
+        if (matchedUser?.email && !candidateEmails.includes(matchedUser.email)) {
+          candidateEmails.unshift(matchedUser.email);
+        }
       }
     } catch (listErr) {
       console.warn("Could not query user list for login resolution:", listErr);
@@ -383,77 +412,6 @@ export const loginWithIdentifier = createServerFn({ method: "POST" })
     };
   });
 
-/** تحويل الاسم أو رقم الهاتف أو البريد إلى البريد المعتمد لتسجيل الدخول بأمان دون تسريب بيانات شخصية */
-export const resolveLoginIdentifier = createServerFn({ method: "POST" })
-  .validator((data: { identifier: string }) => resolveInput.parse(data))
-  .handler(async ({ data }) => {
-    const raw = data.identifier.trim();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-    // أ) إذا كان المدخل بريداً إلكترونياً (يحوي @)
-    if (raw.includes("@")) {
-      const cleanEmail = raw.toLowerCase();
-      // تحقق مما إذا كان هذا البريد مسجلاً كبريد استعادة لحساب هاتف
-      try {
-        const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-        const found = list.data?.users?.find(
-          (u) =>
-            u.email?.toLowerCase() === cleanEmail ||
-            u.user_metadata?.recovery_email?.toLowerCase() === cleanEmail
-        );
-        if (found?.email) {
-          return { authEmail: found.email };
-        }
-      } catch (err) {
-        console.warn("Could not check recovery emails:", err);
-      }
-      return { authEmail: cleanEmail };
-    }
-
-    // ب) إذا كان المدخل أرقاماً (رقم هاتف)
-    const cleanPhone = normalizePhone(raw);
-    if (cleanPhone.length >= 8) {
-      try {
-        const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-        const e164Phone = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
-        const found = list.data?.users?.find(
-          (u) =>
-            u.user_metadata?.phone === cleanPhone ||
-            u.phone === cleanPhone ||
-            u.phone === e164Phone ||
-            u.email?.startsWith(`${cleanPhone}@`)
-        );
-        if (found?.email) {
-          return { authEmail: found.email };
-        }
-      } catch (err) {
-        console.warn("Could not check users list by phone:", err);
-      }
-      return { authEmail: `${cleanPhone}@phone.mawgood.store` };
-    }
-
-    // ج) إذا كان المدخل اسماً كاملاً: مطابقة دقيقة صارمة لمنع التخمين وحصاد الأسماء
-    try {
-      const prof = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("full_name", raw)
-        .limit(1)
-        .maybeSingle();
-
-      if (prof.data?.id) {
-        const u = await supabaseAdmin.auth.admin.getUserById(prof.data.id);
-        if (u.data?.user?.email) {
-          return { authEmail: u.data.user.email };
-        }
-      }
-    } catch (e) {
-      console.warn("Error searching profiles by name:", e);
-    }
-
-    return { authEmail: `${cleanPhone || raw}@phone.mawgood.store` };
-  });
-
 /** طلب إعادة تعيين كلمة المرور عبر البريد الإلكتروني مع تقييد صارم لرابط إعادة التوجيه لمنع Open Redirect */
 export const requestPasswordReset = createServerFn({ method: "POST" })
   .validator((data: { identifier: string; redirectUrl?: string }) => resetInput.parse(data))
@@ -466,22 +424,42 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
       targetEmail = raw.toLowerCase();
     } else {
       const cleanPhone = normalizePhone(raw);
-      const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const e164Phone = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
-      const found = list.data?.users?.find(
-        (u) =>
-          u.user_metadata?.phone === cleanPhone ||
-          u.email?.startsWith(`${cleanPhone}@`) ||
-          u.phone === cleanPhone ||
-          u.phone === e164Phone
-      );
 
-      if (found) {
-        const rec = found.user_metadata?.recovery_email;
-        if (rec) {
-          targetEmail = rec;
-        } else if (found.email && !found.email.includes("@phone.")) {
-          targetEmail = found.email;
+      // فحص سريع ومفهرس في جدول profiles أولاً
+      if (cleanPhone.length >= 8) {
+        try {
+          const prof = await supabaseAdmin.from("profiles").select("id").eq("phone", cleanPhone).maybeSingle();
+          if (prof.data?.id) {
+            const u = await supabaseAdmin.auth.admin.getUserById(prof.data.id);
+            const rec = u.data?.user?.user_metadata?.recovery_email;
+            if (rec) targetEmail = rec;
+            else if (u.data?.user?.email && !u.data.user.email.includes("@phone.")) {
+              targetEmail = u.data.user.email;
+            }
+          }
+        } catch (profErr) {
+          console.warn("Profiles lookup error during reset:", profErr);
+        }
+      }
+
+      if (!targetEmail) {
+        const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const e164Phone = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+        const found = list.data?.users?.find(
+          (u) =>
+            u.user_metadata?.phone === cleanPhone ||
+            u.email?.startsWith(`${cleanPhone}@`) ||
+            u.phone === cleanPhone ||
+            u.phone === e164Phone
+        );
+
+        if (found) {
+          const rec = found.user_metadata?.recovery_email;
+          if (rec) {
+            targetEmail = rec;
+          } else if (found.email && !found.email.includes("@phone.")) {
+            targetEmail = found.email;
+          }
         }
       }
 
@@ -745,48 +723,4 @@ export const checkAndPurgeAccount = createServerFn({ method: "POST" })
     }
 
     return { status: "active" };
-  });
-
-/** تأكيد آمن لحسابات الهاتف المسجلة دون كشف مستخدمي النظام أو تفعيل حسابات بريد خارجية مجهولة */
-export const autoConfirmUser = createServerFn({ method: "POST" })
-  .validator((data: { email: string; password?: string }) =>
-    z.object({ email: z.string().trim(), password: z.string().optional() }).parse(data)
-  )
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const cleanEmail = data.email.toLowerCase().trim();
-
-    // يُسمح بالتأكيد المباشر فقط لحسابات الهاتف النظامية (@phone.husayniya.app أو @phone.mawgood.store) أو عند تقديم كلمة المرور لتأكيد الهوية
-    const isSystemPhoneAccount = cleanEmail.endsWith("@phone.husayniya.app") || cleanEmail.endsWith("@phone.mawgood.store");
-    if (!isSystemPhoneAccount && (!data.password || data.password.length < 6)) {
-      return { success: false, error: "عملية غير مصرح بها" };
-    }
-
-    try {
-      const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const cleanPhone = normalizePhone(cleanEmail);
-      const existing = list.data?.users?.find(
-        (u) =>
-          u.email?.toLowerCase().trim() === cleanEmail ||
-          u.user_metadata?.recovery_email?.toLowerCase().trim() === cleanEmail ||
-          (cleanPhone && cleanPhone.length >= 8 && (
-            u.user_metadata?.phone === cleanPhone ||
-            u.email?.startsWith(`${cleanPhone}@`)
-          ))
-      );
-      if (!existing) {
-        // رسالة خطأ عامة ومحايدة لمنع هجمات تخمين الحسابات (Anti User Enumeration)
-        return { success: false, error: "تعذر إتمام العملية" };
-      }
-
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
-        email_confirm: true,
-      });
-      if (updateError) throw updateError;
-
-      return { success: true, userId: existing.id };
-    } catch (err: any) {
-      console.error("Auto confirm user error:", err);
-      return { success: false, error: "تعذر تفعيل الحساب" };
-    }
   });
