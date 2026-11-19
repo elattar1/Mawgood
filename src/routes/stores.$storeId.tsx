@@ -31,15 +31,17 @@ import { CustomerError, CustomerNotFound } from '@/components/CustomerFeedback';
 
 export const Route = createFileRoute('/stores/$storeId')({
   loader: async ({ params, context }) => {
-    const data = await context.queryClient.ensureQueryData({
-      ...catalogQuery,
-      revalidateIfStale: true,
-    });
+    const [data] = await Promise.all([
+      context.queryClient.ensureQueryData({
+        ...catalogQuery,
+        revalidateIfStale: true,
+      }),
+      context.queryClient.ensureQueryData({
+        ...storeDetailsQuery(params.storeId),
+        revalidateIfStale: true,
+      }),
+    ]);
     if (!data.stores.some((s) => s.id === params.storeId)) throw notFound();
-    await context.queryClient.ensureQueryData({
-      ...storeDetailsQuery(params.storeId),
-      revalidateIfStale: true,
-    });
     return data;
   },
   head: ({ loaderData, params }) => {

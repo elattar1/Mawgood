@@ -221,6 +221,7 @@ function Browse() {
                 key={s.id}
                 to="/stores/$storeId"
                 params={{ storeId: s.id }}
+                preload="intent"
                 className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary hover:shadow-hover"
               >
                 {/* الجزء العلوي: صورة البانر تحت اللوجو مع تدرج لأسفل */}
