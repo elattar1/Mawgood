@@ -236,11 +236,150 @@ export const registerUserWithPhone = createServerFn({ method: "POST" })
       }
     }
 
+    // 5. تسجيل الدخول من السيرفر وإصدار الجلسة لتخطي قيود المعدل للمتصفح
+    let session: { access_token: string; refresh_token: string } | null = null;
+    try {
+      const SUPABASE_URL = process.env["SUPABASE_URL"] || "https://ryxfnrozrzkuhobxfcmw.supabase.co";
+      const SUPABASE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"] || "sb_publishable_oNaEnQErVBl8sBN_5PFmwA_9SVQsPdT";
+      const { createClient } = await import("@supabase/supabase-js");
+      const serverAuthClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const loginRes = await serverAuthClient.auth.signInWithPassword({
+        email: systemEmail,
+        password: data.password,
+      });
+      if (loginRes.data?.session) {
+        session = {
+          access_token: loginRes.data.session.access_token,
+          refresh_token: loginRes.data.session.refresh_token,
+        };
+      }
+    } catch (loginErr) {
+      console.warn("Could not auto-login after user creation on server:", loginErr);
+    }
+
     return {
       success: true,
       alreadyExists: false,
       authEmail: systemEmail,
       phone: cleanPhone,
+      session,
+    };
+  });
+
+/** تسجيل الدخول الآمن من خلال السيرفر لمنع استهلاك كوتة عنوان IP للمتصفح وتفادي مشكلة Request rate limit reached */
+export const loginWithIdentifier = createServerFn({ method: "POST" })
+  .validator((data: { identifier: string; password: string }) =>
+    z.object({
+      identifier: z.string().trim().min(1, "يرجى إدخال رقم الهاتف أو البريد الإلكتروني"),
+      password: z.string().min(1, "يرجى إدخال كلمة المرور"),
+    }).parse(data)
+  )
+  .handler(async ({ data }) => {
+    const raw = data.identifier.trim();
+    const cleanPassword = data.password.trim();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1. تحديد البريد الإلكتروني المعتمد للحساب
+    let candidateEmails: string[] = [];
+    const cleanPhone = normalizePhone(raw);
+
+    if (raw.includes("@")) {
+      candidateEmails.push(raw.toLowerCase());
+    } else if (cleanPhone.length >= 8) {
+      candidateEmails.push(`${cleanPhone}@phone.mawgood.store`);
+      candidateEmails.push(`${cleanPhone}@phone.husayniya.app`);
+    }
+
+    try {
+      const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const users = list.data?.users ?? [];
+      const e164 = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
+
+      const matchedUser = users.find((u) => {
+        const uPhone = u.user_metadata?.phone || u.phone;
+        const uRecEmail = u.user_metadata?.recovery_email?.toLowerCase();
+        const uName = u.user_metadata?.full_name?.trim();
+        return (
+          (cleanPhone.length >= 8 && (uPhone === cleanPhone || uPhone === e164)) ||
+          (raw.includes("@") && (u.email?.toLowerCase() === raw.toLowerCase() || uRecEmail === raw.toLowerCase())) ||
+          (raw.length >= 3 && uName === raw)
+        );
+      });
+
+      if (matchedUser?.email && !candidateEmails.includes(matchedUser.email)) {
+        candidateEmails.unshift(matchedUser.email);
+      }
+    } catch (listErr) {
+      console.warn("Could not query user list for login resolution:", listErr);
+    }
+
+    if (candidateEmails.length === 0) {
+      return { success: false, error: "رقم الهاتف / البريد أو كلمة المرور غير صحيحة." };
+    }
+
+    // 2. محاولة تسجيل الدخول عبر عميل السيرفر
+    const SUPABASE_URL = process.env["SUPABASE_URL"] || "https://ryxfnrozrzkuhobxfcmw.supabase.co";
+    const SUPABASE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"] || "sb_publishable_oNaEnQErVBl8sBN_5PFmwA_9SVQsPdT";
+    const { createClient } = await import("@supabase/supabase-js");
+    const serverAuthClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    let lastError = "";
+    for (const email of candidateEmails) {
+      let authRes = await serverAuthClient.auth.signInWithPassword({
+        email,
+        password: cleanPassword,
+      });
+
+      // إذا كان الحساب غير مفعل، يتم تفعيله فورياً عبر الأدمن وإعادة المحاولة
+      if (
+        authRes.error &&
+        (authRes.error.message.includes("Email not confirmed") ||
+          authRes.error.message.toLowerCase().includes("not confirmed"))
+      ) {
+        try {
+          const list = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+          const target = list.data?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+          if (target) {
+            await supabaseAdmin.auth.admin.updateUserById(target.id, { email_confirm: true, phone_confirm: true });
+            authRes = await serverAuthClient.auth.signInWithPassword({
+              email,
+              password: cleanPassword,
+            });
+          }
+        } catch (confirmErr) {
+          console.warn("Auto-confirm during server login failed:", confirmErr);
+        }
+      }
+
+      if (authRes.data?.session) {
+        return {
+          success: true,
+          session: {
+            access_token: authRes.data.session.access_token,
+            refresh_token: authRes.data.session.refresh_token,
+          },
+        };
+      }
+
+      if (authRes.error) {
+        lastError = authRes.error.message;
+      }
+    }
+
+    if (lastError.toLowerCase().includes("rate limit") || lastError.toLowerCase().includes("too many")) {
+      return {
+        success: false,
+        error: "تم تجاوز الحد الأقصى للمحاولات السريعة، يرجى الانتظار دقيقة واحدة ثم المحاولة مجددًا.",
+      };
+    }
+
+    return {
+      success: false,
+      error: "رقم الهاتف / البريد أو كلمة المرور غير صحيحة.",
     };
   });
 

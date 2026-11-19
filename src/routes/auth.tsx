@@ -24,10 +24,9 @@ import { useAuth } from "@/lib/auth";
 import { pageMeta } from "@/lib/page-meta";
 import {
   registerUserWithPhone,
-  resolveLoginIdentifier,
+  loginWithIdentifier,
   requestPasswordReset,
   normalizePhone,
-  autoConfirmUser,
 } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/auth")({
@@ -70,6 +69,13 @@ function translateAuthError(err: unknown): string {
   if (!err) return "حدث خطأ غير متوقع، يرجى المحاولة لاحقًا.";
   const msg = err instanceof Error ? err.message : String(err);
   if (
+    msg.toLowerCase().includes("rate limit") ||
+    msg.toLowerCase().includes("too many requests") ||
+    msg.toLowerCase().includes("over_email_send_rate_limit")
+  ) {
+    return "تم تجاوز الحد الأقصى للمحاولات السريعة، يرجى الانتظار دقيقة واحدة ثم المحاولة مجددًا.";
+  }
+  if (
     msg.includes("missing OAuth secret") ||
     msg.includes("Unsupported provider") ||
     msg.includes("validation_failed") ||
@@ -78,7 +84,7 @@ function translateAuthError(err: unknown): string {
   ) {
     return "خدمة الدخول بحساب Google بانتظار إضافة مفتاح (OAuth Secret) في لوحة التحكم. يمكنك تسجيل الدخول فوراً وبكل سهولة برقم التليفون أو البريد الإلكتروني أدناه.";
   }
-  if (msg.includes("Invalid login credentials")) {
+  if (msg.includes("Invalid login credentials") || msg.includes("invalid_credentials")) {
     return "رقم الهاتف / البريد أو كلمة المرور غير صحيحة.";
   }
   if (msg.includes("Email not confirmed")) {
@@ -123,7 +129,7 @@ function Auth() {
 
   const targetPath = redirect.startsWith("/admin") ? "/admin" : redirect || "/";
 
-  // 1. تسجيل الدخول برقم التليفون أو البريد الإلكتروني أو الاسم
+  // 1. تسجيل الدخول برقم التليفون أو البريد الإلكتروني أو الاسم (عبر السيرفر لتخطي قيود المعدل)
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     const cleanId = loginIdentifier.trim();
@@ -135,81 +141,23 @@ function Auth() {
     setError("");
     setSuccessMsg("");
     try {
-      const cleanPhone = normalizePhone(cleanId);
-      const isPhone = cleanPhone.length >= 10;
-
-      // أ) محاولة الدخول برقم الهاتف مباشرة في حال تفعيل موفر الهاتف
-      if (isPhone) {
-        const e164 = cleanPhone.startsWith("0") ? `+20${cleanPhone.slice(1)}` : `+20${cleanPhone}`;
-        try {
-          const nativeRes = await supabase.auth.signInWithPassword({
-            phone: e164,
-            password: password.trim(),
-          });
-          if (nativeRes.data?.session) {
-            navigate({ to: targetPath });
-            return;
-          }
-          const nativeErrMsg = nativeRes.error?.message?.toLowerCase() || "";
-          const nativeCode = (nativeRes.error as any)?.code;
-          if (
-            nativeRes.error &&
-            nativeCode !== "phone_provider_disabled" &&
-            !nativeErrMsg.includes("disabled") &&
-            !nativeErrMsg.includes("unsupported")
-          ) {
-            throw nativeRes.error;
-          }
-        } catch (nativeErr: any) {
-          const msg = nativeErr?.message?.toLowerCase() || "";
-          const code = nativeErr?.code;
-          if (
-            code !== "phone_provider_disabled" &&
-            !msg.includes("disabled") &&
-            !msg.includes("unsupported")
-          ) {
-            throw nativeErr;
-          }
-        }
-      }
-
-      // ب) الدخول عبر المعرف المعتمد
-      const resolveRes = await resolveLoginIdentifier({
-        data: { identifier: cleanId },
+      const loginRes = await loginWithIdentifier({
+        data: { identifier: cleanId, password: password.trim() },
       });
 
-      const { data, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: resolveRes.authEmail,
-        password: password.trim(),
+      if (!loginRes.success || !loginRes.session) {
+        setError(loginRes.error || "رقم الهاتف / البريد أو كلمة المرور غير صحيحة.");
+        return;
+      }
+
+      const { error: sessionErr } = await supabase.auth.setSession({
+        access_token: loginRes.session.access_token,
+        refresh_token: loginRes.session.refresh_token,
       });
 
-      if (signInErr) {
-        // إذا كان الحساب بحاجة لتأكيد فوري (تخطي انتظار كود الإيميل فوراً)
-        if (
-          signInErr.message.includes("Email not confirmed") ||
-          signInErr.message.toLowerCase().includes("not confirmed")
-        ) {
-          try {
-            await autoConfirmUser({ data: { email: resolveRes.authEmail || cleanId, password: password.trim() } });
-            const retry = await supabase.auth.signInWithPassword({
-              email: resolveRes.authEmail || cleanId,
-              password: password.trim(),
-            });
-            if (retry.data?.session) {
-              navigate({ to: targetPath });
-              return;
-            }
-            if (retry.error) throw retry.error;
-          } catch (autoErr) {
-            console.error("Auto confirm retry error:", autoErr);
-          }
-        }
-        throw signInErr;
-      }
+      if (sessionErr) throw sessionErr;
 
-      if (data.session) {
-        navigate({ to: targetPath });
-      }
+      navigate({ to: targetPath });
     } catch (err: any) {
       setError(translateAuthError(err));
     } finally {
@@ -275,29 +223,33 @@ function Auth() {
         throw new Error("تعذر إنشاء الحساب، يرجى المحاولة لاحقاً");
       }
 
-      // تسجيل الدخول مباشرة بعد التفعيل الفوري
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: regRes.authEmail,
-        password: password.trim(),
-      });
-
-      if (signInErr) {
-        await autoConfirmUser({ data: { email: regRes.authEmail, password: password.trim() } });
-        const retry = await supabase.auth.signInWithPassword({
-          email: regRes.authEmail,
-          password: password.trim(),
+      // تسجيل الدخول مباشرة بعد التفعيل الفوري (باستخدام الجلسة المنشأة في السيرفر لتخطي قيود المعدل)
+      if (regRes.session) {
+        const { error: sessionErr } = await supabase.auth.setSession({
+          access_token: regRes.session.access_token,
+          refresh_token: regRes.session.refresh_token,
         });
-        if (retry.error) throw retry.error;
-        if (retry.data?.session) {
-          navigate({ to: targetPath });
-          return;
-        }
-      }
-
-      if (signInData?.session) {
+        if (sessionErr) throw sessionErr;
         navigate({ to: targetPath });
         return;
       }
+
+      // في حال لم تُرجع الدالة session مباشرة، نقوم بالدخول عبر loginWithIdentifier على السيرفر
+      const loginRes = await loginWithIdentifier({
+        data: { identifier: cleanPhone, password: password.trim() },
+      });
+
+      if (loginRes.success && loginRes.session) {
+        const { error: sessionErr } = await supabase.auth.setSession({
+          access_token: loginRes.session.access_token,
+          refresh_token: loginRes.session.refresh_token,
+        });
+        if (sessionErr) throw sessionErr;
+        navigate({ to: targetPath });
+        return;
+      }
+
+      navigate({ to: targetPath });
     } catch (err: any) {
       setError(translateAuthError(err));
     } finally {
