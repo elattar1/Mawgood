@@ -2,6 +2,7 @@ import { Package, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/labels";
 import { groupProductsBySection, type StoreSection } from "@/lib/product-sections";
+import { resolveProductImageUrl } from "@/lib/template-catalogs";
 import type { DashboardProduct } from "./queries";
 
 export function DashboardProductList({
@@ -28,7 +29,16 @@ export function DashboardProductList({
               <div className="flex flex-wrap items-center justify-between gap-3 py-4" key={product.id}>
                 <div className="flex min-w-0 items-center gap-3">
                   {product.image_url ? (
-                    <img src={product.image_url} alt="" loading="lazy" className="size-12 rounded object-cover" />
+                    <img
+                      src={resolveProductImageUrl(product.image_url) ?? product.image_url}
+                      alt=""
+                      loading="lazy"
+                      className="size-12 rounded-xl object-cover border"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&auto=format&fit=crop&q=80";
+                      }}
+                    />
                   ) : (
                     <div className="grid size-12 place-items-center rounded bg-muted">
                       <Package className="size-5 text-muted-foreground" />

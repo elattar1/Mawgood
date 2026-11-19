@@ -1,15 +1,16 @@
-// Reference supermarket catalog. Prices are suggestions only; each store sets its own.
-export type CatalogGroup = { key: string; name: string; image: string };
-export type CatalogItem = { key: string; group: string; name: string; size: string; price: number };
+import {
+  SUPERMARKET_GROUPS,
+  SUPERMARKET_ITEMS,
+  findTemplateItem,
+  findTemplateImage,
+  type TemplateGroup,
+  type TemplateItem,
+} from "./template-catalogs";
 
-export const CATALOG_GROUPS: CatalogGroup[] = [
-  { key: "dairy", name: "الألبان والبيض والأجبان", image: "/catalog/dairy.jpg" },
-  { key: "pantry", name: "الزيوت والأرز والمكرونة والبقوليات", image: "/catalog/pantry.jpg" },
-  { key: "canned", name: "المعلبات والصلصات والتوابل", image: "/catalog/canned.jpg" },
-  { key: "drinks", name: "المشروبات والشاي والقهوة", image: "/catalog/drinks.jpg" },
-  { key: "cleaning", name: "المنظفات والمناديل", image: "/catalog/cleaning.jpg" },
-  { key: "snacks", name: "الشيبسي والبسكويت والشوكولاتة", image: "/catalog/snacks.jpg" },
-];
+export type CatalogGroup = TemplateGroup;
+export type CatalogItem = TemplateItem;
+
+export const CATALOG_GROUPS = SUPERMARKET_GROUPS;
 
 const raw: [string, string, string, number][] = [
   ["dairy", "لبن كامل الدسم", "1 لتر", 45], ["dairy", "لبن خالي الدسم", "1 لتر", 45], ["dairy", "زبادي", "105 جم", 9],
@@ -28,6 +29,17 @@ const raw: [string, string, string, number][] = [
   ["snacks", "ويفر", "قطعة", 5], ["snacks", "كيك", "قطعة", 7], ["snacks", "فول سوداني محمص", "100 جم", 20],
 ];
 
-export const CATALOG_ITEMS: CatalogItem[] = raw.map(([group, name, size, price], i) => ({ key: `${group}-${i + 1}`, group, name, size, price }));
-export const catalogItem = (key: string) => CATALOG_ITEMS.find(i => i.key === key);
-export const catalogImage = (group: string) => CATALOG_GROUPS.find(g => g.key === group)?.image ?? null;
+const legacyItems: CatalogItem[] = raw.map(([group, name, size, price], i) => ({
+  key: `${group}-${i + 1}`,
+  category: "supermarkets",
+  group,
+  name,
+  size,
+  price,
+  image: SUPERMARKET_GROUPS.find(g => g.key === group)?.image ?? "",
+}));
+
+export const CATALOG_ITEMS: CatalogItem[] = [...SUPERMARKET_ITEMS, ...legacyItems];
+
+export const catalogItem = (key: string) => findTemplateItem(key) || legacyItems.find(i => i.key === key);
+export const catalogImage = (groupOrKey: string) => findTemplateImage(groupOrKey);

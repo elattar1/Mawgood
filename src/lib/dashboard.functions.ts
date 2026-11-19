@@ -17,6 +17,11 @@ import {
   reviewStoreDeletionRequestInput,
 } from "./dashboard-rules";
 import { CATALOG_GROUPS, catalogItem, catalogImage } from "./supermarket-catalog";
+import {
+  getCategoryCatalog,
+  findTemplateItem,
+  ALL_TEMPLATE_GROUPS,
+} from "./template-catalogs";
 import { suggestedSectionsFor } from "./product-sections";
 import { REAL_STORES, REAL_SECTIONS, REAL_PRODUCTS } from "./real-stores-data";
 
@@ -815,25 +820,34 @@ export const importCatalogProducts = createServerFn({ method: "POST" })
       storeCategory = store.data.category;
     }
 
-    if (storeCategory !== "supermarkets") throw new Error("الكتالوج الجاهز متاح لمتاجر السوبر ماركت فقط");
+    const ALLOWED_CATEGORIES = ["supermarkets", "pharmacies", "restaurants"];
+    if (!ALLOWED_CATEGORIES.includes(storeCategory)) {
+      throw new Error("الكتالوج الجاهز متاح لمتاجر السوبر ماركت والصيدليات والمطاعم والكافيهات فقط");
+    }
 
     const dbClient = isAdmin ? supabaseAdmin : context.supabase;
+    const categoryConfig = getCategoryCatalog(storeCategory);
+    const categoryGroups = categoryConfig?.groups ?? ALL_TEMPLATE_GROUPS;
 
     const items = data.items.map(input => {
-      const item = catalogItem(input.key);
+      const item = findTemplateItem(input.key) || catalogItem(input.key);
       if (!item) throw new Error("منتج غير موجود في الكتالوج");
       return { input, item };
     });
-    const usedGroups = CATALOG_GROUPS.filter(group => items.some(({ item }) => item.group === group.key));
-    const sectionSetup = await dbClient.from("store_sections").upsert(
-      usedGroups.map((group, index) => ({
-        store_id: data.store_id,
-        name: group.name,
-        sort_order: (CATALOG_GROUPS.indexOf(group) + 1) * 10 + index * 0,
-      })),
-      { onConflict: "store_id,name", ignoreDuplicates: true },
-    );
-    if (sectionSetup.error) throw new Error(sectionSetup.error.message);
+
+    const usedGroups = categoryGroups.filter(group => items.some(({ item }) => item.group === group.key));
+    if (usedGroups.length > 0) {
+      const sectionSetup = await dbClient.from("store_sections").upsert(
+        usedGroups.map((group, index) => ({
+          store_id: data.store_id,
+          name: group.name,
+          sort_order: (categoryGroups.indexOf(group) + 1) * 10 + index * 0,
+        })),
+        { onConflict: "store_id,name", ignoreDuplicates: true },
+      );
+      if (sectionSetup.error) throw new Error(sectionSetup.error.message);
+    }
+
     const sections = await dbClient
       .from("store_sections")
       .select("id,name")
@@ -841,13 +855,14 @@ export const importCatalogProducts = createServerFn({ method: "POST" })
     if (sections.error) throw new Error(sections.error.message);
 
     const rows = items.map(({ input, item }) => {
-      const group = CATALOG_GROUPS.find(candidate => candidate.key === item.group);
+      const group = categoryGroups.find(candidate => candidate.key === item.group) || ALL_TEMPLATE_GROUPS.find(candidate => candidate.key === item.group);
+      const desc = item.genericName ? `${item.genericName} • ${item.size}` : item.size;
       return {
         store_id: data.store_id,
         catalog_key: item.key,
         name: item.name,
-        description: item.size,
-        image_url: catalogImage(item.group),
+        description: desc,
+        image_url: item.image || group?.image || null,
         section_id: sections.data.find(section => section.name === group?.name)?.id ?? null,
         price: input.price,
         stock_qty: input.stock_qty,

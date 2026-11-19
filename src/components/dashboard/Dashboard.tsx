@@ -52,6 +52,7 @@ import { StatusBadge } from "@/components/AppShell";
 import { Field, SelectField, ToggleField } from "./fields";
 import { ImageUploadField } from "./ImageUpload";
 import { CatalogPicker } from "./CatalogPicker";
+import { resolveProductImageUrl } from "@/lib/template-catalogs";
 import { dashboardQuery, dashboardProductsQuery, dashboardSectionsQuery, dashboardOrderItemsQuery, type DashboardData, type DashboardProduct, type DashboardSection } from "./queries";
 import { 
   playNewOrderAlert,
@@ -1313,9 +1314,11 @@ export function Dashboard({
                 <Layers className="size-3.5 text-primary" />
                 + إضافة فئة
               </Button>
-              <Button variant="secondary" size="sm" disabled={!store || !productQuery.data} onClick={() => setCatalogOpen(true)}>
-                <ClipboardList className="size-3.5 ml-1" /> من الكتالوج الجاهز
-              </Button>
+              {store && ["supermarkets", "pharmacies", "restaurants"].includes(store.category) && (
+                <Button variant="secondary" size="sm" disabled={!productQuery.data} onClick={() => setCatalogOpen(true)}>
+                  <ClipboardList className="size-3.5 ml-1" /> من الكتالوج الجاهز
+                </Button>
+              )}
               <Button size="sm" disabled={!store} onClick={() => setProductEdit("new")}>
                 <Plus className="size-3.5 ml-1" /> إضافة منتج
               </Button>
@@ -1520,7 +1523,16 @@ export function Dashboard({
                       <div className="flex flex-wrap items-center justify-between gap-3 py-3" key={p.id}>
                         <div className="flex items-center gap-3 min-w-0">
                           {p.image_url ? (
-                            <img src={p.image_url} alt="" loading="lazy" className="size-12 rounded-xl object-cover border shrink-0" />
+                            <img
+                              src={resolveProductImageUrl(p.image_url, store?.category) ?? p.image_url}
+                              alt=""
+                              loading="lazy"
+                              className="size-12 rounded-xl object-cover border shrink-0"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src =
+                                  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&auto=format&fit=crop&q=80";
+                              }}
+                            />
                           ) : (
                             <div className="grid size-12 place-items-center rounded-xl bg-muted border shrink-0">
                               <Package className="size-5 text-muted-foreground" />
@@ -2019,7 +2031,16 @@ export function Dashboard({
         </DialogContent>
       </Dialog>
 
-      {store && <CatalogPicker storeId={store.id} existing={allProducts.filter(p => p.store_id === store.id)} open={catalogOpen} onOpenChange={setCatalogOpen} />}
+      {store && (
+        <CatalogPicker
+          storeId={store.id}
+          storeCategory={store.category}
+          storeName={store.name}
+          existing={allProducts.filter(p => p.store_id === store.id)}
+          open={catalogOpen}
+          onOpenChange={setCatalogOpen}
+        />
+      )}
 
       <Dialog
         open={productEdit !== null}

@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Plus, Minus, Trash2, UtensilsCrossed, Layers } from "lucide-react";
+import { Plus, Minus, Trash2, UtensilsCrossed, Layers, Package } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart";
 import type { Catalog } from "@/lib/customer-queries";
 import { money } from "@/lib/labels";
 import { groupProductsBySection, type StoreSection } from "@/lib/product-sections";
+import { resolveProductImageUrl, getDefaultCategoryFallbackImage } from "@/lib/template-catalogs";
 
 type Product = {
   id: string;
@@ -150,14 +151,24 @@ export function StoreProducts({
                     className="flex min-w-0 items-center gap-4 rounded-2xl border bg-card p-4 shadow-soft transition-all hover:border-primary/40 hover:shadow-hover"
                     key={product.id}
                   >
-                    {product.image_url && (
+                    {product.image_url ? (
                       <img
-                        src={product.image_url}
+                        src={resolveProductImageUrl(product.image_url, store.category) ?? product.image_url}
                         alt={product.name}
                         loading="lazy"
                         decoding="async"
                         className="size-20 shrink-0 rounded-xl object-cover border"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = getDefaultCategoryFallbackImage(store.category);
+                        }}
                       />
+                    ) : (
+                      <div className="size-20 shrink-0 rounded-xl bg-muted/60 border flex flex-col items-center justify-center text-muted-foreground p-1 text-center">
+                        <Package className="size-6 opacity-40 mb-0.5" />
+                        <span className="text-[10px] font-semibold text-muted-foreground/80 line-clamp-1">
+                          {store.category === 'pharmacies' ? 'دواء' : store.category === 'restaurants' ? 'وجبة' : 'منتج'}
+                        </span>
+                      </div>
                     )}
                     <div className="min-w-0 flex-1">
                       <h4 className="break-words font-sans font-bold text-base text-foreground">
