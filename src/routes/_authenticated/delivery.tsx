@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCheck, MapPin, Phone, RefreshCw, Store, Truck, Wallet, PackageOpen, Navigation, Volume2, VolumeX, Radio, Power, PowerOff, AlertCircle, MessageCircle, User } from "lucide-react";
+import { CheckCheck, MapPin, Phone, PhoneCall, RefreshCw, Store, Truck, Wallet, PackageOpen, Navigation, Volume2, VolumeX, Radio, Power, PowerOff, AlertCircle, MessageCircle, User } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,25 +12,30 @@ import { PageTitle, StatusBadge } from "@/components/AppShell";
 import { DeliveryError, DeliveryStat } from "@/components/DeliveryShared";
 import { driverBoardQuery } from "@/lib/delivery-queries";
 import { claimOrder, completeOrder, getDriverBoard, setMyDriverWorkingStatus, updateDriverLocation } from "@/lib/delivery.functions";
-import { driverWallet } from "@/lib/delivery-rules";
+import { driverWallet, canEndDriverShift } from "@/lib/delivery-rules";
 import { money, dateAr } from "@/lib/labels";
 import { pageMeta } from "@/lib/page-meta";
 import { cleanOrderNotes } from "@/lib/utils";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { LiveDriverTrackingDialog } from "@/components/LiveDriverTrackingDialog";
+import { IncomingDeliveryCallDialog } from "@/components/delivery/IncomingDeliveryCallDialog";
 import { ChatUnreadBadge } from "@/components/ChatUnreadBadge";
 import { extractCoordinates, cleanDisplayAddress, getGoogleNavigationUrl, getGoogleMapsPinUrl } from "@/lib/map-utils";
 import { playNewOrderAlert } from "@/lib/order-alert";
 import { useOrderChatUnreadMap } from "@/lib/chat-unread";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/delivery")({
   validateSearch: (s: Record<string, unknown>) => ({
     tab: ["available", "current", "wallet"].includes(String(s["tab"]))
       ? String(s["tab"])
+      : s["call"]
+      ? "available"
       : s["chat"]
       ? "current"
       : "available",
     chat: typeof s["chat"] === "string" ? s["chat"] : undefined,
+    call: typeof s["call"] === "string" ? s["call"] : undefined,
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(driverBoardQuery),
   head: () => pageMeta("لوحة كابتن الدليفري", "الطلبات المتاحة والتوصيل الحالي وحساب أرباح كابتن موجود"),
@@ -44,12 +49,13 @@ type DeliveryOrder = Awaited<ReturnType<typeof getDriverBoard>>["mine"][number];
 function Delivery() {
   const { data, isFetching } = useSuspenseQuery({ ...driverBoardQuery, refetchInterval: 15_000 });
   const qc = useQueryClient();
-  const { tab, chat } = Route.useSearch();
+  const { tab, chat, call } = Route.useSearch();
   const navigate = Route.useNavigate();
   const claim = useServerFn(claimOrder), complete = useServerFn(completeOrder);
   const setWorkingStatus = useServerFn(setMyDriverWorkingStatus);
   const [confirm, setConfirm] = useState<DeliveryOrder | null>(null);
   const [chatOrderId, setChatOrderId] = useState<string | null>(chat || null);
+  const [callOrderId, setCallOrderId] = useState<string | null>(call || null);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [lastGpsUpdate, setLastGpsUpdate] = useState<Date | null>(null);
   const [isGpsBroadcasting, setIsGpsBroadcasting] = useState(false);
@@ -60,6 +66,12 @@ function Delivery() {
       setChatOrderId(chat);
     }
   }, [chat]);
+
+  useEffect(() => {
+    if (call) {
+      setCallOrderId(call);
+    }
+  }, [call]);
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window !== "undefined") {
       try {
@@ -118,14 +130,47 @@ function Delivery() {
     return () => clearInterval(interval);
   }, [current.length]);
 
-  // تشغيل تنبيه نغمة واهتزاز خفيف عند ظهور طلبات جديدة بالرادار إذا كان السائق شغالاً
+  // الاستماع الفوري للطلبات الجديدة الجاهزة للاستلام عبر WebSocket
+  useEffect(() => {
+    if (!isWorking) return;
+    const channel = supabase
+      .channel("driver-orders-live-radar")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        (payload: any) => {
+          qc.invalidateQueries({ queryKey: ["delivery-board"] });
+          const updated = payload?.new;
+          if (updated && updated.status === "preparing" && !updated.driver_id) {
+            setCallOrderId(updated.id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isWorking, qc]);
+
+  // تشغيل تنبيه نغمة ومكالمة الاستلام عند ظهور طلبات جاهزة بالرادار إذا كان السائق شغالاً
   useEffect(() => {
     if (isWorking && data.available.length > prevAvailableCount.current) {
       playNewOrderAlert(soundEnabled);
       toast.info("🚨 طلب توصيل جديد متاح في رادار موجود!");
+      const firstReady = data.available.find((o) => o.status === "preparing" && !o.driver_id);
+      if (firstReady && !callOrderId) {
+        setCallOrderId(firstReady.id);
+      }
     }
     prevAvailableCount.current = data.available.length;
-  }, [data.available.length, soundEnabled, isWorking]);
+  }, [data.available, soundEnabled, isWorking, callOrderId]);
+
+  const hasActiveOrders = current.length > 0;
 
   const toggleStatus = useMutation({
     mutationFn: (newStatus: boolean) => setWorkingStatus({ data: { is_active: newStatus } }),
@@ -139,6 +184,15 @@ function Delivery() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const handleToggleShift = () => {
+    const check = canEndDriverShift(current.length);
+    if (isWorking && !check.allowed) {
+      toast.error(check.reason || `لا يمكنك إيقاف الوردية أثناء وجود ${current.length} طلب قيد التوصيل في عهدتك! يجب تسليم الطلبات أولاً.`);
+      return;
+    }
+    toggleStatus.mutate(!isWorking);
+  };
 
   const action = useMutation({
     mutationFn: ({ id, delivered }: { id: string; delivered: boolean }) => delivered ? complete({ data: { id } }) : claim({ data: { id } }),
@@ -183,19 +237,26 @@ function Delivery() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* زر تبديل حالة العمل (شغال / غير شغال) */}
+          {/* زر تبديل حالة العمل (شغال / غير شغال) مع حماية ضد الإيقاف مع وجود طلبات جارية */}
           <Button
             size="sm"
-            disabled={toggleStatus.isPending}
-            onClick={() => toggleStatus.mutate(!isWorking)}
-            className={`font-bold gap-1.5 shadow-sm ${
+            disabled={toggleStatus.isPending || (isWorking && hasActiveOrders)}
+            onClick={handleToggleShift}
+            className={`font-bold gap-1.5 shadow-sm transition-all ${
               isWorking
-                ? "bg-destructive/15 hover:bg-destructive/25 text-destructive border border-destructive/30"
+                ? hasActiveOrders
+                  ? "bg-muted text-muted-foreground cursor-not-allowed border opacity-80"
+                  : "bg-destructive/15 hover:bg-destructive/25 text-destructive border border-destructive/30"
                 : "bg-emerald-600 hover:bg-emerald-700 text-white"
             }`}
+            title={isWorking && hasActiveOrders ? "لا يمكن إيقاف الوردية أثناء وجود طلبات جارية في عهدتك" : undefined}
           >
             {isWorking ? <PowerOff className="size-4" /> : <Power className="size-4" />}
-            {isWorking ? "إيقاف الوردية (أنا غير شغال الآن)" : "بدء الوردية (أنا شغال الآن)"}
+            {isWorking
+              ? hasActiveOrders
+                ? `لا يمكن إيقاف الوردية (${current.length} طلب معك)`
+                : "إيقاف الوردية (أنا غير شغال الآن)"
+              : "بدء الوردية (أنا شغال الآن)"}
           </Button>
 
           {isWorking && (
@@ -565,20 +626,33 @@ function Delivery() {
                   </div>
                 </div>
 
-                <Button
-                  className="mt-4 w-full font-bold shadow-md h-10"
-                  disabled={action.isPending || current.length > 0 || !isWorking}
-                  onClick={() => action.mutate({ id: o.id, delivered: false })}
-                >
-                  <Truck className="ml-1.5 size-4" />
-                  {!isWorking ? "يجب بدء الوردية أولاً" : current.length > 0 ? "أكمل الطلب الحالي معك أولاً" : action.isPending ? "جارٍ قبول الطلب…" : "استلام الطلب وبدء التوصيل"}
-                </Button>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCallOrderId(o.id)}
+                    className="flex-1 font-bold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 h-10 gap-1.5 text-xs shadow-sm"
+                  >
+                    <PhoneCall className="size-3.5" />
+                    <span>مكالمة الاستلام</span>
+                  </Button>
+
+                  <Button
+                    className="flex-[2] font-bold shadow-md h-10"
+                    disabled={action.isPending || current.length > 0 || !isWorking}
+                    onClick={() => action.mutate({ id: o.id, delivered: false })}
+                  >
+                    <Truck className="ml-1.5 size-4" />
+                    {!isWorking ? "يجب بدء الوردية أولاً" : current.length > 0 ? "أكمل الطلب الحالي معك أولاً" : action.isPending ? "جارٍ قبول الطلب…" : "استلام وبدء التوصيل"}
+                  </Button>
+                </div>
               </article>
             ))}
 
             {data.available.length === 0 && (
               <div className="md:col-span-2">
-                <Empty text={isWorking ? "لا توجد طلبات جديدة في الرادار حالياً. سيتم تنبيهك بصوت فور توفر طلب." : "أنت غير شغال حالياً. قم ببدء الوردية لتظهر الطلبات المتاحة."} />
+                <Empty text={isWorking ? "لا توجد طلبات جديدة في الرادار حالياً. سيتم تنبيهك بمكالمة فور توفر طلب جاهز." : "أنت غير شغال حالياً. قم ببدء الوردية لتظهر الطلبات المتاحة."} />
               </div>
             )}
           </div>
@@ -621,6 +695,22 @@ function Delivery() {
         open={!!trackingOrderId}
         onOpenChange={(open) => !open && setTrackingOrderId(null)}
         onOpenChat={(id) => setChatOrderId(id)}
+      />
+
+      {/* شاشة مكالمة استلام أوردر جاهز للتوصيل (Telephone Call Dialog) */}
+      <IncomingDeliveryCallDialog
+        orderId={callOrderId}
+        open={!!callOrderId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCallOrderId(null);
+            if (call) navigate({ search: { tab: "available" } });
+          }
+        }}
+        onClaimSuccess={() => {
+          setCallOrderId(null);
+          navigate({ search: { tab: "current" } });
+        }}
       />
     </div>
   );

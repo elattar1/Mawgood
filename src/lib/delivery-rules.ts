@@ -16,3 +16,14 @@ export function driverWallet(orders: DeliveredOrder[], now = new Date()) {
   const sum = (list: DeliveredOrder[], key: "delivery_fee" | "total") => list.reduce((s, o) => s + Number(o[key] ?? 0), 0);
   return { deliveredCount: done.length, todayCount: today.length, earnings: sum(done, "delivery_fee"), todayEarnings: sum(today, "delivery_fee"), cashCollected: sum(done, "total") };
 }
+
+/** Check if the driver is allowed to end their shift. Blocked if there are active orders on the way. */
+export function canEndDriverShift(activeOrdersCount: number): { allowed: boolean; reason?: string } {
+  if (activeOrdersCount > 0) {
+    return {
+      allowed: false,
+      reason: `لا يمكنك إيقاف الوردية أثناء وجود ${activeOrdersCount} طلب قيد التوصيل في عهدتك. يجب تسليم أو إنهاء الطلبات الحالية أولاً.`,
+    };
+  }
+  return { allowed: true };
+}

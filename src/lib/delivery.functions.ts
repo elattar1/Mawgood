@@ -66,9 +66,81 @@ export const setMyDriverWorkingStatus = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const driver = await supabaseAdmin.from("drivers").select("user_id").eq("user_id", context.userId).maybeSingle();
     if (!driver.data) throw new Error("حسابك غير مسجل ككابتن توصيل");
+
+    // Block driver from deactivating shift if they currently have active orders on the way
+    if (!data.is_active) {
+      const activeOrders = await supabaseAdmin
+        .from("orders")
+        .select("id")
+        .eq("driver_id", context.userId)
+        .eq("status", "on_the_way");
+      if (activeOrders.data && activeOrders.data.length > 0) {
+        throw new Error(`لا يمكنك إيقاف الوردية أثناء وجود ${activeOrders.data.length} طلب قيد التوصيل في عهدتك. يجب تسليم أو إنهاء الطلبات أولاً.`);
+      }
+    }
+
     const r = await supabaseAdmin.from("drivers").update({ is_active: data.is_active }).eq("user_id", context.userId);
     if (r.error) throw new Error(r.error.message);
     return { ok: true, is_active: data.is_active };
+  });
+
+export const getDeliveryOrderCallDetails = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(z.object({ orderId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Check if user is active driver or admin
+    const [driverCheck, adminCheck] = await Promise.all([
+      supabaseAdmin.from("drivers").select("is_active").eq("user_id", context.userId).maybeSingle(),
+      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" }),
+    ]);
+
+    if (!driverCheck.data?.is_active && !adminCheck.data) {
+      throw new Error("لا تملك صلاحية استلام هذا الطلب أو أنك خارج الوردية");
+    }
+
+    const orderRes = await supabaseAdmin
+      .from("orders")
+      .select("id, status, total, subtotal, delivery_fee, address, phone, notes, created_at, store_id, customer_id, driver_id, stores(name, address, phone, specialty), order_items(name, qty, price)")
+      .eq("id", data.orderId)
+      .maybeSingle();
+
+    if (!orderRes.data) throw new Error("الطلب غير موجود");
+    const order = orderRes.data;
+
+    let customerName = "العميل";
+    if (order.customer_id) {
+      const profile = await supabaseAdmin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", order.customer_id)
+        .maybeSingle();
+      if (profile.data?.full_name) {
+        customerName = profile.data.full_name;
+      }
+    }
+
+    const store = (order.stores as any) || {};
+
+    return {
+      id: order.id,
+      status: order.status,
+      driver_id: order.driver_id,
+      total: Number(order.total || 0),
+      subtotal: Number(order.subtotal ?? (Number(order.total || 0) - Number(order.delivery_fee || 0))),
+      delivery_fee: Number(order.delivery_fee || 0),
+      address: order.address,
+      phone: order.phone,
+      customer_name: customerName,
+      notes: order.notes,
+      created_at: order.created_at,
+      store_id: order.store_id,
+      store_name: store.name || "المتجر",
+      store_address: store.address || "العنوان غير مسجل",
+      store_phone: store.phone || null,
+      items: (order.order_items as any[]) ?? [],
+    };
   });
 
 export const claimOrder = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])

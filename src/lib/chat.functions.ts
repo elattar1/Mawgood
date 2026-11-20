@@ -770,8 +770,8 @@ export async function notifyOrderStatusUpdate(
         } catch {}
       }
 
-      // If preparing and needs a driver, notify active drivers
-      if (newStatus === "preparing" && !order.driver_id) {
+      // 1. When store accepts the order (accepted), notify active drivers that a new order is being prepared
+      if (newStatus === "accepted" && !order.driver_id) {
         try {
           const activeDrivers = await supabaseAdmin
             .from("drivers")
@@ -779,8 +779,8 @@ export async function notifyOrderStatusUpdate(
             .eq("is_active", true);
 
           if (activeDrivers.data && activeDrivers.data.length > 0) {
-            const driverTitle = `🛵 طلب جديد متاح للتوصيل (${storeName})`;
-            const driverBody = `يوجد طلب جديد قيد التحضير في ${storeName}. افتح رادار التوصيل لمعاينة الطلب وقبوله.`;
+            const driverTitle = `🛵 طلب جديد قيد التنفيذ والتجهيز (${storeName})`;
+            const driverBody = `قام ${storeName} بقبول طلب جديد وبدأ تحضيره وتجهيزه. استعد لاستلامه قريباً عبر رادار التوصيل.`;
             const driverPath = `/delivery?tab=available`;
 
             for (const driver of activeDrivers.data) {
@@ -794,7 +794,39 @@ export async function notifyOrderStatusUpdate(
                 title: driverTitle,
                 body: driverBody,
                 path: driverPath,
-                tag: `husayniya-driver-available-${orderId}`,
+                tag: `husayniya-driver-accepted-${orderId}`,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      // 2. When store marks order ready (preparing), notify active drivers for instant pickup + call ringtone
+      if (newStatus === "preparing" && !order.driver_id) {
+        try {
+          const activeDrivers = await supabaseAdmin
+            .from("drivers")
+            .select("user_id")
+            .eq("is_active", true);
+
+          if (activeDrivers.data && activeDrivers.data.length > 0) {
+            const driverTitle = `🚨 أوردر جاهز للاستلام الآن من ${storeName}!`;
+            const driverBody = `تم تجهيز الأوردر #${shortId} بالكامل في ${storeName} وهو بانتظار استلامك الآن للتوصيل.`;
+            const driverPath = `/delivery?tab=available&call=${orderId}`;
+
+            for (const driver of activeDrivers.data) {
+              await supabaseAdmin.from("notifications").insert({
+                user_id: driver.user_id,
+                title: driverTitle,
+                body: driverBody,
+                link: driverPath,
+              });
+              await sendPushToUser(driver.user_id, {
+                title: driverTitle,
+                body: driverBody,
+                path: driverPath,
+                tag: `husayniya-driver-ready-${orderId}`,
+                requireInteraction: true,
               });
             }
           }

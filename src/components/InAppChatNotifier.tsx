@@ -8,6 +8,7 @@ import { getNotifications, readNotification } from "@/lib/customer.functions";
 import { registerPushDevice } from "@/lib/push.functions";
 import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { IncomingOrderCallDialog } from "@/components/dashboard/IncomingOrderCallDialog";
+import { IncomingDeliveryCallDialog } from "@/components/delivery/IncomingDeliveryCallDialog";
 import { StoreOrderActionDialog } from "@/components/dashboard/StoreOrderActionDialog";
 import { Button } from "@/components/ui/button";
 import { playCustomerOrderAlert, getCustomerSoundEnabled, playNewOrderAlert } from "@/lib/order-alert";
@@ -62,7 +63,7 @@ interface NotificationBannerItem {
 }
 
 export function InAppChatNotifier() {
-  const { user } = useAuth();
+  const { user, isDriver } = useAuth();
   const getNotifs = useServerFn(getNotifications);
   const markRead = useServerFn(readNotification);
   const registerDevice = useServerFn(registerPushDevice);
@@ -73,6 +74,7 @@ export function InAppChatNotifier() {
   const [openChatOrderId, setOpenChatOrderId] = useState<string | null>(null);
   const [storeActionOrderId, setStoreActionOrderId] = useState<string | null>(null);
   const [incomingCallOrderId, setIncomingCallOrderId] = useState<string | null>(null);
+  const [deliveryCallOrderId, setDeliveryCallOrderId] = useState<string | null>(null);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -224,25 +226,39 @@ export function InAppChatNotifier() {
       )
       .subscribe();
 
-    // 2. القناة الفورية للطلبات الجديدة في قاعدة البيانات مباشرة (سواء أُرسل الطلب من التطبيق أو الموقع)
+    // 2. القناة الفورية للطلبات في قاعدة البيانات مباشرة (سواء أُرسل الطلب من التطبيق أو الموقع)
     const ordersChannel = supabase
       .channel(`in-app-orders-${user.id}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'orders',
         },
         (payload: any) => {
           qc.invalidateQueries({ queryKey: ["dashboard"] });
           qc.invalidateQueries({ queryKey: ["customer-orders"] });
+          qc.invalidateQueries({ queryKey: ["delivery-board"] });
           qc.invalidateQueries({ queryKey: ["in-app-chat-notifications", user.id] });
 
           const newOrder = payload?.new;
+          const isDeliveryPage = typeof window !== "undefined" && window.location.pathname.includes("/delivery");
+
           // إذا كان الطلب جديداً بحالة قيد الانتظار ولم يقم هذا المستخدم بطلبه (أي أنه صاحب المتجر أو الإدارة)
           if (newOrder?.id && newOrder?.status === "pending" && newOrder.customer_id !== user.id) {
             setIncomingCallOrderId(newOrder.id);
+          }
+
+          // إذا أصبح الطلب جاهزاً للاستلام (preparing) وكان المستخدم سائقاً وليس في صفحة الدليفري حالياً
+          if (
+            newOrder?.id &&
+            newOrder?.status === "preparing" &&
+            !newOrder.driver_id &&
+            isDriver &&
+            !isDeliveryPage
+          ) {
+            setDeliveryCallOrderId(newOrder.id);
           }
         }
       )
@@ -252,7 +268,7 @@ export function InAppChatNotifier() {
       supabase.removeChannel(notifsChannel);
       supabase.removeChannel(ordersChannel);
     };
-  }, [user?.id, qc]);
+  }, [user?.id, isDriver, qc]);
 
   // Check for incoming notifications (orders, chat, broadcasts, appointments)
   useEffect(() => {
@@ -338,8 +354,37 @@ export function InAppChatNotifier() {
 
       const isStoreNewOrder =
         (unread.title.includes("طلب جديد") || unread.body.includes("طلب جديد")) &&
+        !unread.link?.includes("/delivery") &&
         !isOrderStatus &&
         !isChat;
+
+      const isDeliveryReadyCall =
+        unread.link?.includes("/delivery") &&
+        (unread.link.includes("call=") || unread.title.includes("جاهز للاستلام"));
+
+      if (isDeliveryReadyCall) {
+        qc.invalidateQueries({ queryKey: ['delivery-board'] });
+        let targetOrderId = extractedOrderId;
+        if (!targetOrderId) {
+          const uuidMatch = (unread.link || unread.body || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (uuidMatch) {
+            targetOrderId = uuidMatch[0];
+          }
+        }
+        const isDeliveryPage = typeof window !== "undefined" && window.location.pathname.includes("/delivery");
+        if (targetOrderId && isDriver && !isDeliveryPage) {
+          void supabase
+            .from('orders')
+            .select('id, status, driver_id')
+            .eq('id', targetOrderId)
+            .maybeSingle()
+            .then((res) => {
+              if (res.data?.status === 'preparing' && !res.data?.driver_id) {
+                setDeliveryCallOrderId(targetOrderId);
+              }
+            });
+        }
+      }
 
       if (isStoreNewOrder) {
         qc.invalidateQueries({ queryKey: ['dashboard'] });
@@ -610,6 +655,17 @@ export function InAppChatNotifier() {
         orderId={incomingCallOrderId}
         open={!!incomingCallOrderId}
         onOpenChange={(open) => !open && setIncomingCallOrderId(null)}
+      />
+
+      {/* Full-Screen Incoming Phone Call Alert Screen for Delivery Captains */}
+      <IncomingDeliveryCallDialog
+        orderId={deliveryCallOrderId}
+        open={!!deliveryCallOrderId}
+        onOpenChange={(open) => !open && setDeliveryCallOrderId(null)}
+        onClaimSuccess={() => {
+          setDeliveryCallOrderId(null);
+          navigate({ to: "/delivery", search: { tab: "current" } });
+        }}
       />
     </>
   );
