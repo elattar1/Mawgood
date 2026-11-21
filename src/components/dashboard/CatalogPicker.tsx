@@ -210,7 +210,7 @@ export function CatalogPicker({
 
         {/* أقسام وفئات الكتالوج (تظهر إذا لم يكن هناك بحث نشط) */}
         {!searchQuery && (
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-56 overflow-y-auto p-1.5 border rounded-2xl bg-muted/20">
             {catalogConfig.groups.map((g) => {
               const n = catalogConfig.items.filter(
                 (i) => i.group === g.key && picks[i.key]
@@ -349,7 +349,9 @@ export function CatalogPicker({
                       )}
 
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium">{item.size}</span>
+                        <span className="font-semibold px-2 py-0.5 rounded-md bg-muted text-foreground border border-border/50 text-[11px]">
+                          {item.size}
+                        </span>
                         <span>•</span>
                         <span className="text-primary font-bold">
                           سعر مقترح: {item.price} ج.م

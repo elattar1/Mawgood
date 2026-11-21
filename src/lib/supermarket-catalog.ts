@@ -36,7 +36,7 @@ const legacyItems: CatalogItem[] = raw.map(([group, name, size, price], i) => ({
   name,
   size,
   price,
-  image: SUPERMARKET_GROUPS.find(g => g.key === group)?.image ?? "",
+  image: SUPERMARKET_GROUPS.find(g => g.key === group)?.image ?? findTemplateImage(group) ?? "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=600&auto=format&fit=crop&q=80",
 }));
 
 export const CATALOG_ITEMS: CatalogItem[] = [...SUPERMARKET_ITEMS, ...legacyItems];
