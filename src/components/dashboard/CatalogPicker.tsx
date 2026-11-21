@@ -165,6 +165,16 @@ export function CatalogPicker({
     return catalogConfig.items.filter((i) => i.group === group);
   }, [catalogConfig.items, group, searchQuery]);
 
+  const [renderLimit, setRenderLimit] = useState(60);
+
+  useEffect(() => {
+    setRenderLimit(60);
+  }, [group, searchQuery]);
+
+  const visibleItems = useMemo(() => {
+    return displayedItems.slice(0, renderLimit);
+  }, [displayedItems, renderLimit]);
+
   const allDisplayedSelected =
     displayedItems.length > 0 && displayedItems.every((item) => !!picks[item.key]);
 
@@ -298,7 +308,8 @@ export function CatalogPicker({
               <p className="text-sm font-medium">لم يتم العثور على أصناف مطابقة للبحث</p>
             </div>
           ) : (
-            displayedItems.map((item) => {
+            <>
+              {visibleItems.map((item) => {
               const pick = picks[item.key];
               const has = owned.has(item.key);
               const productImage = item.image || currentGroup?.image;
@@ -419,7 +430,21 @@ export function CatalogPicker({
                   )}
                 </div>
               );
-            })
+            })}
+            {displayedItems.length > renderLimit && (
+              <div className="py-3 text-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRenderLimit((prev) => prev + 60)}
+                  className="gap-1.5 font-bold rounded-xl text-xs h-8"
+                >
+                  <span>عرض المزيد ({displayedItems.length - renderLimit} صنف متبقي)</span>
+                </Button>
+              </div>
+            )}
+          </>
           )}
         </div>
 

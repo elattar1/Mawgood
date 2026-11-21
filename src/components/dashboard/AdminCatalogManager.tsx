@@ -100,6 +100,16 @@ export function AdminCatalogManager() {
     return list;
   }, [items, activeGroup, searchQuery]);
 
+  const [renderLimit, setRenderLimit] = useState(60);
+
+  useMemo(() => {
+    setRenderLimit(60);
+  }, [activeCategory, activeGroup, searchQuery]);
+
+  const visibleItems = useMemo(() => {
+    return filteredItems.slice(0, renderLimit);
+  }, [filteredItems, renderLimit]);
+
   // Status counters
   const stats = useMemo(() => {
     const overridesCount = Object.keys(data?.overrides ?? {}).length;
@@ -427,8 +437,9 @@ export function AdminCatalogManager() {
             <p className="text-sm font-medium">لم يتم العثور على أصناف مطابقة للبحث</p>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredItems.map((item) => {
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visibleItems.map((item) => {
               const isOverridden = !!data?.overrides?.[item.key];
               const isCustom = data?.customItems?.some((c) => c.key === item.key);
               const groupObj = groups.find((g) => g.key === item.group);
@@ -551,6 +562,21 @@ export function AdminCatalogManager() {
                 </div>
               );
             })}
+            </div>
+
+            {filteredItems.length > renderLimit && (
+              <div className="py-4 text-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRenderLimit((prev) => prev + 60)}
+                  className="gap-2 font-bold rounded-xl text-xs h-9 px-4"
+                >
+                  <span>عرض المزيد ({filteredItems.length - renderLimit} صنف إضافي)</span>
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
