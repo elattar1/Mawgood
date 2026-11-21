@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, LoaderCircle, Search, Sparkles, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   type TemplateItem,
   type CategoryCatalogConfig,
 } from "@/lib/template-catalogs";
+import { getDynamicCategoryCatalog } from "@/lib/template-catalog.functions";
 import { importCatalogProducts } from "@/lib/dashboard.functions";
 
 type Pick = { price: string; qty: string };
@@ -39,13 +40,21 @@ export function CatalogPicker({
     [existing]
   );
 
-  // Load category-tailored catalog (Pharmacies / Supermarkets / Restaurants)
+  const doFetchDynamic = useServerFn(getDynamicCategoryCatalog);
+  const { data: dynamicConfig } = useQuery({
+    queryKey: ["dynamic-catalog", storeCategory],
+    queryFn: () => doFetchDynamic({ data: storeCategory }),
+    staleTime: 60_000,
+  });
+
+  // Load category-tailored catalog (Pharmacies / Supermarkets / Restaurants) with live admin customizations
   const catalogConfig: CategoryCatalogConfig = useMemo(() => {
     return (
+      dynamicConfig ??
       getCategoryCatalog(storeCategory) ??
       getCategoryCatalog("supermarkets")!
     );
-  }, [storeCategory]);
+  }, [dynamicConfig, storeCategory]);
 
   const [group, setGroup] = useState<string>(catalogConfig.groups[0]?.key ?? "");
   const [searchQuery, setSearchQuery] = useState("");

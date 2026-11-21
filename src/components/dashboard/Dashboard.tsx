@@ -52,6 +52,7 @@ import { StatusBadge } from "@/components/AppShell";
 import { Field, SelectField, ToggleField } from "./fields";
 import { ImageUploadField } from "./ImageUpload";
 import { CatalogPicker } from "./CatalogPicker";
+import { AdminCatalogManager } from "./AdminCatalogManager";
 import { resolveProductImageUrl } from "@/lib/template-catalogs";
 import { dashboardQuery, dashboardProductsQuery, dashboardSectionsQuery, dashboardOrderItemsQuery, type DashboardData, type DashboardProduct, type DashboardSection } from "./queries";
 import { 
@@ -1845,6 +1846,12 @@ export function Dashboard({
             {!periodTotals.count && <Empty text="لم تكتمل أي عمليات بيع خلال الفترة المحددة" />}
           </div>
         </TabsContent>
+
+        {admin && (
+          <TabsContent value="catalog">
+            <AdminCatalogManager />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Edit Store Dialog */}

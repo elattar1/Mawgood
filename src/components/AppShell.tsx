@@ -15,6 +15,7 @@ import {
   Wallet,
   ArrowRightLeft,
   Flame,
+  Boxes,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -121,6 +122,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <>
                 <Link to="/admin" search={{ tab: "stores" }} activeProps={active}>المتاجر والخدمات</Link>
                 <Link to="/admin" search={{ tab: "products" }} activeProps={active}>إدارة المنيو</Link>
+                <Link to="/admin" search={{ tab: "catalog" }} activeProps={active}>الكتالوج الجاهز</Link>
                 <Link to="/admin" search={{ tab: "orders" }} activeProps={active}>الطلبات</Link>
                 <Link to="/drivers" search={{ q: "" }} activeProps={active}>فريق الدليفري</Link>
                 <Link to="/admin" search={{ tab: "earnings" }} activeProps={active}>الأرباح والخزينة</Link>
@@ -349,6 +351,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <Package className="h-5 w-5" />
                 <span>المنيو</span>
+              </Link>
+              <Link
+                to="/admin"
+                search={{ tab: "catalog" }}
+                className={getNavItemClass(currentPath.includes("/admin") && currentTab === "catalog")}
+              >
+                <Boxes className="h-5 w-5" />
+                <span>الكتالوج</span>
               </Link>
               <Link
                 to="/admin"

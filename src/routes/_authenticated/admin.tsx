@@ -13,7 +13,7 @@ import { useOffersVisibility } from "@/lib/use-offers-visibility";
 export const Route = createFileRoute("/_authenticated/admin")({
   validateSearch: (s: SearchSchemaInput & { q?: unknown; tab?: unknown; order?: unknown; chat?: unknown }) => ({
     q: typeof s.q === "string" ? s.q : "",
-    tab: ["stores", "products", "orders", "earnings"].includes(String(s.tab))
+    tab: ["stores", "products", "orders", "earnings", "catalog"].includes(String(s.tab))
       ? String(s.tab)
       : (s.order || s.chat)
       ? "orders"

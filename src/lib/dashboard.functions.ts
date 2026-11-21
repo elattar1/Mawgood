@@ -840,12 +840,50 @@ export const importCatalogProducts = createServerFn({ method: "POST" })
     }
 
     const dbClient = isAdmin ? supabaseAdmin : context.supabase;
+    let customOrOverrideItems: Record<string, any> = {};
+    let customGroupOverrides: Record<string, any> = {};
+    try {
+      const { data: dbRows } = await supabaseAdmin
+        .from("ai_recommendation_access_state")
+        .select("id, message")
+        .in("id", ["catalog_item_overrides", "catalog_custom_items", "catalog_group_overrides"]);
+      if (dbRows) {
+        for (const r of dbRows) {
+          if (r.id === "catalog_custom_items" && r.message) {
+            try {
+              const list = JSON.parse(r.message);
+              for (const item of list) customOrOverrideItems[item.key] = item;
+            } catch {}
+          } else if (r.id === "catalog_item_overrides" && r.message) {
+            try {
+              const map = JSON.parse(r.message);
+              for (const [k, v] of Object.entries(map)) {
+                customOrOverrideItems[k] = { ...(customOrOverrideItems[k] || {}), ...(v as any) };
+              }
+            } catch {}
+          } else if (r.id === "catalog_group_overrides" && r.message) {
+            try {
+              customGroupOverrides = JSON.parse(r.message);
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
     const categoryConfig = getCategoryCatalog(storeCategory);
-    const categoryGroups = categoryConfig?.groups ?? ALL_TEMPLATE_GROUPS;
+    let categoryGroups = categoryConfig?.groups ?? ALL_TEMPLATE_GROUPS;
+    if (Object.keys(customGroupOverrides).length > 0) {
+      categoryGroups = categoryGroups.map(g => {
+        const o = customGroupOverrides[g.key];
+        return o ? { ...g, name: o.name ?? g.name, image: o.image ?? g.image } : g;
+      });
+    }
 
     const items = data.items.map(input => {
-      const item = findTemplateItem(input.key) || catalogItem(input.key);
-      if (!item) throw new Error("منتج غير موجود في الكتالوج");
+      const base = findTemplateItem(input.key) || catalogItem(input.key);
+      const override = customOrOverrideItems[input.key];
+      const item = override ? { ...(base || {}), ...override } : base;
+      if (!item || !item.name) throw new Error("منتج غير موجود في الكتالوج");
       return { input, item };
     });
 
