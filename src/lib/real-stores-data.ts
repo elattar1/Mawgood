@@ -1046,7 +1046,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "جبن رومي مصري بلدي معتق عالي الجودة",
     "price": 90,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image4710.png"
   },
   {
     "id": "40000000-0000-0000-0006-000000000002",
@@ -1056,7 +1056,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "حليب طبيعي معقم كامل الدسم غني بالكالسيوم",
     "price": 44,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image4459.png"
   },
   {
     "id": "40000000-0000-0000-0006-000000000003",
@@ -1066,7 +1066,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "زيت ذرة طبيعي خفيف وصحي للطبخ والقلي",
     "price": 95,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image343.png"
   },
   {
     "id": "40000000-0000-0000-0006-000000000004",
@@ -1076,7 +1076,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "أرز أبيض حبة رفيعة منقى ومغسول وجاهز للطهي",
     "price": 36,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image4093.png"
   },
   {
     "id": "40000000-0000-0000-0006-000000000005",
@@ -1086,7 +1086,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "بيض مزارع الشرقية أحمر طازج يوم بيوم",
     "price": 165,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image201.jpeg"
   },
   {
     "id": "40000000-0000-0000-0006-000000000006",
@@ -1096,7 +1096,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "مسحوق مركز للغسالات الأوتوماتيك مع داوني ونظافة فائقة",
     "price": 195,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image3302.png"
   },
   {
     "id": "40000000-0000-0000-0007-000000000001",
@@ -1106,7 +1106,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "تونة قطع في زيت نباتي نقي سهلة الفتح",
     "price": 65,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image1395.png"
   },
   {
     "id": "40000000-0000-0000-0007-000000000002",
@@ -1116,7 +1116,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "مكرونة قمح صلب سريعة الطهي لا تتعجن",
     "price": 15,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1551462147-ff29053bfc14?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image4336.png"
   },
   {
     "id": "40000000-0000-0000-0007-000000000003",
@@ -1126,7 +1126,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "قهوة سريعة الذوبان بنكهة حبوب البن المحمصة الغنية",
     "price": 140,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image746.png"
   },
   {
     "id": "40000000-0000-0000-0008-000000000001",
@@ -1136,7 +1136,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "سكر مكرر ناصع البياض سريع الذوبان",
     "price": 35,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image915.png"
   },
   {
     "id": "40000000-0000-0000-0008-000000000002",
@@ -1146,7 +1146,7 @@ export const REAL_PRODUCTS: RealProduct[] = [
     "description": "شاي أسود حبيبات عالي الجودة توليفة قوية",
     "price": 55,
     "is_available": true,
-    "image_url": "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=600&auto=format&fit=crop&q=80"
+    "image_url": "/catalog/items/image583.png"
   },
   {
     "id": "40000000-0000-0000-0009-000000000001",

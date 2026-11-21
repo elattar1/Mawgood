@@ -909,12 +909,16 @@ export const importCatalogProducts = createServerFn({ method: "POST" })
     const rows = items.map(({ input, item }) => {
       const group = categoryGroups.find(candidate => candidate.key === item.group) || ALL_TEMPLATE_GROUPS.find(candidate => candidate.key === item.group);
       const desc = item.genericName ? `${item.genericName} • ${item.size}` : item.size;
+      const rawImage = item.image || group?.image || null;
+      const safeDbImage = rawImage && rawImage.startsWith('/catalog/items/')
+        ? `https://mawgood.app${rawImage}`
+        : rawImage;
       return {
         store_id: data.store_id,
         catalog_key: item.key,
         name: item.name,
         description: desc,
-        image_url: item.image || group?.image || null,
+        image_url: safeDbImage,
         section_id: sections.data.find(section => section.name === group?.name)?.id ?? null,
         price: input.price,
         stock_qty: input.stock_qty,

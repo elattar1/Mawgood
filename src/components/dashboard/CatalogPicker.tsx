@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   getCategoryCatalog,
+  resolveProductImageUrl,
   type TemplateItem,
   type CategoryCatalogConfig,
 } from "@/lib/template-catalogs";
@@ -312,7 +313,7 @@ export function CatalogPicker({
               {visibleItems.map((item) => {
               const pick = picks[item.key];
               const has = owned.has(item.key);
-              const productImage = item.image || currentGroup?.image;
+              const productImage = resolveProductImageUrl(item.image) || item.image || currentGroup?.image;
 
               return (
                 <div
@@ -332,13 +333,13 @@ export function CatalogPicker({
                     {/* صورة المنتج الحقيقية الواضحة */}
                     <div className="relative size-14 shrink-0 rounded-xl overflow-hidden border bg-muted shadow-xs">
                       <img
-                        src={productImage}
+                        src={resolveProductImageUrl(productImage) ?? productImage}
                         alt={item.name}
                         width={56}
                         height={56}
                         loading="lazy"
                         decoding="async"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain p-1"
                         onError={(e) => {
                           // صورة بديلة إذا لم تتوفر الصورة
                           (e.currentTarget as HTMLImageElement).src =

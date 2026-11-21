@@ -63,7 +63,7 @@ function ProductCardItem({
             alt={hasMultipleSizes ? card.baseName : activeProduct.name}
             loading="lazy"
             decoding="async"
-            className="size-20 shrink-0 rounded-xl object-cover border"
+            className="size-20 shrink-0 rounded-xl object-contain p-1 border bg-card"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).src = getDefaultCategoryFallbackImage(store.category);
             }}

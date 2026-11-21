@@ -41,7 +41,7 @@ describe('Template Catalogs & Product Images', () => {
     }
   });
 
-  it('provides supermarket catalog with brand names, sizes/flavors and valid HTTPS images', () => {
+  it('provides supermarket catalog with brand names, sizes/flavors and valid images', () => {
     const superm = getCategoryCatalog('supermarkets');
     expect(superm).toBeDefined();
     expect(superm!.items.length).toBeGreaterThanOrEqual(30);
@@ -49,10 +49,10 @@ describe('Template Catalogs & Product Images', () => {
     const juhayna = superm!.items.find((i) => i.key === 'sp-juhayna-full-1l');
     expect(juhayna).toBeDefined();
     expect(juhayna?.brand).toBe('جهينة');
-    expect(juhayna?.image).toMatch(/^https:\/\//);
+    expect(juhayna?.image).toMatch(/^https:\/\/|^\/catalog\//);
 
     for (const item of SUPERMARKET_ITEMS) {
-      expect(item.image).toMatch(/^https:\/\//);
+      expect(item.image).toMatch(/^https:\/\/|^\/catalog\//);
       expect(item.name).toBeTruthy();
       expect(item.size).toBeTruthy();
       expect(item.price).toBeGreaterThan(0);
@@ -95,5 +95,7 @@ describe('Template Catalogs & Product Images', () => {
     expect(resolveProductImageUrl('/catalog/drinks.jpg')).toMatch(/^https:\/\//);
     expect(resolveProductImageUrl(null)).toBeNull();
     expect(resolveProductImageUrl('https://example.com/photo.jpg')).toBe('https://example.com/photo.jpg');
+    expect(resolveProductImageUrl('/catalog/items/image1.png')).toBe('/catalog/items/image1.png');
+    expect(resolveProductImageUrl('https://mawgood.app/catalog/items/image1.png')).toBe('/catalog/items/image1.png');
   });
 });

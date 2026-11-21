@@ -35,10 +35,11 @@ import {
   resetAdminCatalogItem,
   saveAdminCatalogGroup,
 } from "@/lib/template-catalog.functions";
-import type {
-  TemplateItem,
-  TemplateGroup,
-  CategoryCatalogConfig,
+import {
+  resolveProductImageUrl,
+  type TemplateItem,
+  type TemplateGroup,
+  type CategoryCatalogConfig,
 } from "@/lib/template-catalogs";
 import { money } from "@/lib/labels";
 
@@ -453,12 +454,13 @@ export function AdminCatalogManager() {
                     <div className="flex items-start gap-3">
                       <div className="relative size-16 shrink-0 rounded-xl overflow-hidden border bg-muted shadow-xs">
                         <img
-                          src={item.image || groupObj?.image}
+                          src={resolveProductImageUrl(item.image) || item.image || groupObj?.image}
                           alt={item.name}
                           width={64}
                           height={64}
                           loading="lazy"
-                          className="h-full w-full object-cover"
+                          decoding="async"
+                          className="h-full w-full object-contain p-1"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src =
                               groupObj?.image ||
