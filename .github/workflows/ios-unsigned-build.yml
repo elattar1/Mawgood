@@ -56,3 +56,89 @@ jobs:
           path: |
             shot1.png
             shot2.png
+      - name: UI smoke test (read-only public navigation, no login, no orders)
+        id: ui
+        continue-on-error: true
+        run: |
+          gem install xcodeproj --user-install --no-document
+          mkdir -p ios/App/AppUITests /tmp/uitest
+          cat > ios/App/AppUITests/AppUITests.swift <<'SWIFT'
+          import XCTest
+
+          final class AppUITests: XCTestCase {
+            let dir = "/tmp/uitest"
+
+            func snap(_ app: XCUIApplication, _ name: String) {
+              try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+              try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+              try? app.debugDescription.write(toFile: "\(dir)/\(name).txt", atomically: true, encoding: .utf8)
+            }
+
+            func label(_ app: XCUIApplication, _ text: String) -> XCUIElement {
+              return app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", text)).firstMatch
+            }
+
+            func testPublicNavigation() {
+              let app = XCUIApplication()
+              app.launch()
+              let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+              let deny = sb.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Don")).firstMatch
+              let sawPrompt = deny.waitForExistence(timeout: 45)
+              if sawPrompt { deny.tap() }
+              try? "prompt_seen=\(sawPrompt)".write(toFile: "\(dir)/prompt.txt", atomically: true, encoding: .utf8)
+              XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 30), "web view not shown")
+              let home = label(app, "الرئيسية")
+              XCTAssertTrue(home.waitForExistence(timeout: 30), "home tab not found")
+              sleep(3)
+              snap(app, "01-home")
+              let before = app.debugDescription
+              let cart = label(app, "السلة")
+              XCTAssertTrue(cart.waitForExistence(timeout: 10), "cart tab not found")
+              cart.tap()
+              sleep(5)
+              snap(app, "02-cart")
+              XCTAssertNotEqual(before, app.debugDescription, "cart tap did not change the screen")
+              home.tap()
+              sleep(4)
+              snap(app, "03-home-again")
+              let cat = label(app, "المطاعم والكافيهات")
+              if cat.waitForExistence(timeout: 10) { cat.tap(); sleep(4); snap(app, "04-category") }
+            }
+          }
+          SWIFT
+          cat > /tmp/add_ui_target.rb <<'RUBY'
+          require 'xcodeproj'
+          proj = Xcodeproj::Project.open('ios/App/App.xcodeproj')
+          app = proj.targets.find { |t| t.name == 'App' }
+          t = proj.new_target(:ui_test_bundle, 'AppUITests', :ios, '15.0')
+          t.add_dependency(app)
+          g = proj.main_group.new_group('AppUITests', 'AppUITests')
+          t.add_file_references([g.new_file('AppUITests.swift')])
+          t.build_configurations.each do |c|
+            c.build_settings['TEST_TARGET_NAME'] = 'App'
+            c.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.husayniya.services.uitests'
+            c.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
+            c.build_settings['SWIFT_VERSION'] = '5.0'
+          end
+          proj.save
+          sch = Xcodeproj::XCScheme.new
+          sch.add_build_target(app)
+          sch.add_test_target(t)
+          sch.set_launch_target(app)
+          sch.save_as('ios/App/App.xcodeproj', 'AppUITests', true)
+          RUBY
+          ruby /tmp/add_ui_target.rb
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']]; print(c[-1]['udid'])")
+          xcrun simctl shutdown all || true
+          xcodebuild test -project ios/App/App.xcodeproj -scheme AppUITests \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
+          exit ${PIPESTATUS[0]}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-smoke
+          path: /tmp/uitest/
+      - name: Fail if UI smoke failed
+        if: steps.ui.outcome == 'failure'
+        run: exit 1
