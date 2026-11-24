@@ -41,7 +41,7 @@ jobs:
       - run: npm install --legacy-peer-deps --ignore-scripts
       - name: Remove hardcoded production fallbacks (CI workspace only, not committed)
         run: |
-          sed -i 's#"https://ryxfnrozrzkuhobxfcmw.supabase.co"#"https://staging-required.invalid"#g' src/lib/auth.functions.ts
+          sed -i '' 's#"https://ryxfnrozrzkuhobxfcmw.supabase.co"#"https://staging-required.invalid"#g' src/lib/auth.functions.ts
           if grep -rn "ryxfnrozrzkuhobxfcmw" src --include=*.ts --include=*.tsx | grep -v "src/test/"; then echo "production ref still in src"; exit 1; fi
       - name: Build web (node-server)
         run: NITRO_PRESET=node-server npx vite build
