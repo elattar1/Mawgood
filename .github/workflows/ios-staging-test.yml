@@ -191,17 +191,10 @@ jobs:
           sleep(2)
           snap(app, "09-added")
           stage("added-to-cart")
-          let inPageCart = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "السلة (")).firstMatch
-          if inPageCart.waitForExistence(timeout: 5) { inPageCart.tap() } else {
-            let cartTab = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
-            XCTAssertNotNil(cartTab, "cart entry not found")
-            cartTab?.tap()
-          }
+          let cartTab = app.links.matching(NSPredicate(format: "label CONTAINS %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
+          XCTAssertNotNil(cartTab, "bottom cart tab not found")
+          cartTab?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
           sleep(6)
-          if !label(app, "سلة المشتريات").exists {
-            let cartTab2 = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
-            cartTab2?.tap(); sleep(6)
-          }
           snap(app, "10-cart")
           let addr = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS %@", "اكتب عنوانك")).firstMatch
           tries = 0
