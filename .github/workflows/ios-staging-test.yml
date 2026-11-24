@@ -22,7 +22,7 @@ jobs:
   staging:
     if: github.ref == 'refs/heads/ios-prep'
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
       VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
@@ -82,20 +82,127 @@ jobs:
           grep -rn "localhost:3000" ios/App/App/capacitor.config.json
           xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -5
-      - name: Launch simulator against localhost and screenshot
+      - name: Create synthetic UI-test user (staging only, example.test, no email sent)
         run: |
-          APP=$(find build/Build/Products -name 'App.app' -maxdepth 3 | head -1)
+          set -e
+          mkdir -p /tmp/uitest-cred /tmp/uitest
+          PW="Ci$(openssl rand -hex 10)"; echo "::add-mask::$PW"
+          EMAIL="ci-ui-$(date +%s)@example.test"
+          UID_=$(curl -fsS -X POST "$SUPABASE_URL/auth/v1/admin/users" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\",\"email_confirm\":true}" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+          echo "$UID_" > /tmp/uid-ui
+          printf '{"email":"%s","password":"%s"}' "$EMAIL" "$PW" > /tmp/uitest-cred/cred.json
+          echo "created synthetic UI user"
+      - name: UI test - real login through the iOS app (staging, localhost shell)
+        id: ui
+        continue-on-error: true
+        run: |
+          gem install xcodeproj --user-install --no-document
+          mkdir -p ios/App/AppUITests
+          cat > ios/App/AppUITests/AppUITests.swift <<'SWIFT'
+          import XCTest
+
+          final class AppUITests: XCTestCase {
+              let dir = "/tmp/uitest"
+
+              func snap(_ app: XCUIApplication, _ name: String) {
+                  try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                  try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+                  try? app.debugDescription.write(toFile: "\(dir)/\(name).txt", atomically: true, encoding: .utf8)
+              }
+
+              func label(_ app: XCUIApplication, _ text: String) -> XCUIElement {
+                  return app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", text)).firstMatch
+              }
+
+              func testLoginWithSyntheticUser() throws {
+                  let data = try Data(contentsOf: URL(fileURLWithPath: "/tmp/uitest-cred/cred.json"))
+                  let cred = try JSONSerialization.jsonObject(with: data) as! [String: String]
+                  let app = XCUIApplication()
+                  app.launch()
+                  let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+                  let deny = sb.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Don")).firstMatch
+                  if deny.waitForExistence(timeout: 45) { deny.tap() }
+                  XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 30), "web view not shown")
+                  let home = label(app, "الرئيسية")
+                  XCTAssertTrue(home.waitForExistence(timeout: 30), "home tab not found")
+                  sleep(3)
+                  snap(app, "01-home")
+                  let accLinks = app.links.matching(NSPredicate(format: "label == %@", "حسابي")).allElementsBoundByIndex
+                  let acc = accLinks.max(by: { $0.frame.minY < $1.frame.minY })
+                  XCTAssertNotNil(acc, "account tab not found")
+                  acc?.tap()
+                  sleep(4)
+                  snap(app, "02-account-or-auth")
+                  let idField = app.textFields.firstMatch
+                  XCTAssertTrue(idField.waitForExistence(timeout: 20), "login identifier field not found")
+                  idField.tap()
+                  idField.typeText(cred["email"]!)
+                  let pw = app.secureTextFields.firstMatch
+                  XCTAssertTrue(pw.waitForExistence(timeout: 10), "password field not found")
+                  pw.tap()
+                  pw.typeText(cred["password"]!)
+                  snap(app, "03-filled")
+                  let btns = app.buttons.matching(NSPredicate(format: "label == %@", "تسجيل الدخول")).allElementsBoundByIndex
+                  let submit = btns.max(by: { $0.frame.minY < $1.frame.minY })
+                  XCTAssertNotNil(submit, "sign-in button not found")
+                  submit?.tap()
+                  sleep(8)
+                  snap(app, "04-after-login")
+                  let acc2 = app.links.matching(NSPredicate(format: "label == %@", "حسابي")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
+                  acc2?.tap()
+                  sleep(4)
+                  snap(app, "05-account-logged-in")
+                  let logout = label(app, "تسجيل الخروج")
+                  var found = logout.waitForExistence(timeout: 10)
+                  if !found { app.swipeUp(); found = logout.waitForExistence(timeout: 5) }
+                  snap(app, "06-final")
+                  XCTAssertTrue(found, "after login the account page did not show the logout button (login via the real UI failed)")
+              }
+          }
+          SWIFT
+          cat > /tmp/add_ui_target.rb <<'RUBY'
+          require 'xcodeproj'
+          proj = Xcodeproj::Project.open('ios/App/App.xcodeproj')
+          app = proj.targets.find { |t| t.name == 'App' }
+          t = proj.new_target(:ui_test_bundle, 'AppUITests', :ios, '15.0')
+          t.add_dependency(app)
+          g = proj.main_group.new_group('AppUITests', 'AppUITests')
+          t.add_file_references([g.new_file('AppUITests.swift')])
+          t.build_configurations.each do |c|
+            c.build_settings['TEST_TARGET_NAME'] = 'App'
+            c.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.husayniya.services.uitests'
+            c.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
+            c.build_settings['SWIFT_VERSION'] = '5.0'
+            c.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
+            c.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+          end
+          proj.save
+          sch = Xcodeproj::XCScheme.new
+          sch.add_build_target(app)
+          sch.add_test_target(t)
+          sch.set_launch_target(app)
+          sch.save_as('ios/App/App.xcodeproj', 'AppUITests', true)
+          RUBY
+          ruby /tmp/add_ui_target.rb
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']]; print(c[-1]['udid'])")
-          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch "$UDID" com.husayniya.services
-          sleep 40
-          xcrun simctl io "$UDID" screenshot staging-home.png
-          ls -la staging-home.png
+          xcrun simctl shutdown all || true
+          xcodebuild test -project ios/App/App.xcodeproj -scheme AppUITests \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build2 \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -60
+          exit ${PIPESTATUS[0]}
+      - name: Delete synthetic UI user
+        if: always()
+        run: |
+          rm -f /tmp/uitest-cred/cred.json
+          [ -s /tmp/uid-ui ] && curl -fsS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$(cat /tmp/uid-ui)" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -o /dev/null -w "delete ui user http %{http_code}\n" || echo "no ui user to delete"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: staging-simulator
+          name: staging-ui
           path: |
-            staging-home.png
+            /tmp/uitest/
             /tmp/server.log
+      - name: Fail if UI test failed
+        if: steps.ui.outcome == 'failure'
+        run: exit 1
