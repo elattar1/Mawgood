@@ -1,6 +1,6 @@
 name: iOS unsigned build check
 
-# Imports the iOS preparation (ios-prep.tar.gz) once, then compiles the iOS
+# Imports the iOS preparation (2-ios-prep.tar.gz) once, then compiles the iOS
 # project for the simulator with no signing and no secrets. It does NOT make an
 # installable or App Store build. Standard GitHub-hosted runner only.
 on:
@@ -22,11 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Import prepared files (once)
-        if: github.ref == 'refs/heads/ios-prep' && hashFiles('ios-prep.tar.gz') != ''
+        if: github.ref == 'refs/heads/ios-prep' && hashFiles('2-ios-prep.tar.gz') != ''
         run: |
-          tar xzf ios-prep.tar.gz
-          git rm -q --cached ios-prep.tar.gz
-          rm ios-prep.tar.gz
+          tar xzf 2-ios-prep.tar.gz
+          git rm -q --cached 2-ios-prep.tar.gz
+          rm 2-ios-prep.tar.gz
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
