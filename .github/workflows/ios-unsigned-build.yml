@@ -42,4 +42,25 @@ jobs:
           xcodebuild -project ios/App/App.xcodeproj -scheme App \
             -sdk iphonesimulator -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO build
+      - name: Simulator smoke test (launch app, screenshot)
+        run: |
+          APP=$(find build/Build/Products -name 'App.app' -maxdepth 3 | head -1)
+          echo "APP=$APP"
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']]; print(c[-1]['udid'])")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.husayniya.services
+          sleep 30
+          xcrun simctl io "$UDID" screenshot shot1.png
+          sips -Z 420 -s format jpeg -s formatOptions 45 shot1.png --out shot1.jpg
+          ls -la shot1.png shot1.jpg
+          echo "-----B64START"
+          base64 -i shot1.jpg
+          echo "-----B64END"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshot
+          path: shot1.png
