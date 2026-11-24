@@ -93,6 +93,12 @@ jobs:
           echo "$UID_" > /tmp/uid-ui
           printf '{"email":"%s","password":"%s"}' "$EMAIL" "$PW" > /tmp/uitest-cred/cred.json
           echo "created synthetic UI user"
+          DEMAIL="ci-driver-$(date +%s)@example.test"; DPW="Ci$(openssl rand -hex 10)"; echo "::add-mask::$DPW"
+          DUID=$(curl -fsS -X POST "$SUPABASE_URL/auth/v1/admin/users" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$DEMAIL\",\"password\":\"$DPW\",\"email_confirm\":true}" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+          echo "$DUID" > /tmp/uid-driver
+          curl -fsS -X POST "$SUPABASE_URL/rest/v1/drivers" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' \
+            -d "{\"user_id\":\"$DUID\",\"full_name\":\"CI Driver (synthetic)\",\"phone\":\"01999999998\",\"is_active\":true}" -w "driver row http %{http_code}\n"
       - name: UI test - real login through the iOS app (staging, localhost shell)
         id: ui
         continue-on-error: true
@@ -158,6 +164,50 @@ jobs:
                   if !found { app.swipeUp(); found = logout.waitForExistence(timeout: 5) }
                   snap(app, "06-final")
                   XCTAssertTrue(found, "after login the account page did not show the logout button (login via the real UI failed)")
+          func stage(_ n: String) { try? n.write(toFile: "\(dir)/stage.txt", atomically: true, encoding: .utf8) }
+          stage("login-ok")
+          label(app, "الرئيسية").tap()
+          sleep(4)
+          let storeCard = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "أبو حسين")).firstMatch
+          var tries = 0
+          while !storeCard.exists && tries < 8 { app.swipeUp(); tries += 1; sleep(1) }
+          snap(app, "07-store-list")
+          XCTAssertTrue(storeCard.exists, "sample store card (أبو حسين) not found on home")
+          storeCard.tap()
+          sleep(5)
+          snap(app, "08-store")
+          let add = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@ OR label == %@", "إضافة", "أضف للسلة")).firstMatch
+          tries = 0
+          while !add.exists && tries < 8 { app.swipeUp(); tries += 1; sleep(1) }
+          XCTAssertTrue(add.exists, "add-to-cart control not found in store page")
+          add.tap()
+          sleep(2)
+          snap(app, "09-added")
+          stage("added-to-cart")
+          let cartTab = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
+          XCTAssertNotNil(cartTab, "cart tab not found")
+          cartTab?.tap()
+          sleep(5)
+          snap(app, "10-cart")
+          let addr = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS %@", "اكتب عنوانك")).firstMatch
+          tries = 0
+          while !addr.exists && tries < 6 { app.swipeUp(); tries += 1; sleep(1) }
+          XCTAssertTrue(addr.exists, "address field not found in cart")
+          addr.tap(); addr.typeText("Test address staging")
+          let phone = app.textFields.matching(NSPredicate(format: "placeholderValue == %@", "01xxxxxxxxx")).firstMatch
+          tries = 0
+          while !phone.exists && tries < 4 { app.swipeUp(); tries += 1; sleep(1) }
+          XCTAssertTrue(phone.exists, "phone field not found in cart")
+          phone.tap(); phone.typeText("01999999999")
+          snap(app, "11-checkout-filled")
+          let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "تأكيد وإرسال الطلب")).firstMatch
+          tries = 0
+          while !confirm.exists && tries < 6 { app.swipeUp(); tries += 1; sleep(1) }
+          XCTAssertTrue(confirm.exists, "confirm button not found (store closed or no active driver would show another label)")
+          confirm.tap()
+          sleep(8)
+          snap(app, "12-after-order")
+          stage("order-submitted")
               }
           }
           SWIFT
@@ -191,6 +241,19 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build2 \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -60
           exit ${PIPESTATUS[0]}
+      - name: Verify order in staging DB and clean up (orders, driver, users)
+        if: always()
+        run: |
+          H1="apikey: $STAGING_SERVICE_ROLE_KEY"; H2="Authorization: Bearer $STAGING_SERVICE_ROLE_KEY"
+          curl -sS "$SUPABASE_URL/rest/v1/orders?select=id,status&order=created_at.desc&limit=5" -H "$H1" -H "$H2" > /tmp/orders.json
+          python3 -c "import json;d=json.load(open('/tmp/orders.json'));print('orders in staging:',len(d),[o.get('status') for o in d] if isinstance(d,list) else d)"
+          IDS=$(python3 -c "import json;d=json.load(open('/tmp/orders.json'));print(','.join(o['id'] for o in d) if isinstance(d,list) else '')")
+          if [ -n "$IDS" ]; then
+            curl -sS -X DELETE "$SUPABASE_URL/rest/v1/order_items?order_id=in.($IDS)" -H "$H1" -H "$H2" -o /dev/null -w "delete order_items http %{http_code}\n" || true
+            curl -sS -X DELETE "$SUPABASE_URL/rest/v1/orders?id=in.($IDS)" -H "$H1" -H "$H2" -o /dev/null -w "delete orders http %{http_code}\n" || true
+          fi
+          [ -s /tmp/uid-driver ] && curl -sS -X DELETE "$SUPABASE_URL/rest/v1/drivers?user_id=eq.$(cat /tmp/uid-driver)" -H "$H1" -H "$H2" -o /dev/null -w "delete driver row http %{http_code}\n" || true
+          [ -s /tmp/uid-driver ] && curl -sS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$(cat /tmp/uid-driver)" -H "$H1" -H "$H2" -o /dev/null -w "delete driver user http %{http_code}\n" || true
       - name: Delete synthetic UI user
         if: always()
         run: |
