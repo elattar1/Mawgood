@@ -6,7 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {
-    url: 'https://www.mawgood.store',
+    // Default is production. Override at `cap sync` time (e.g. MAWGOOD_APP_URL=https://staging.example) to point a test build at another deployment.
+    url: process.env.MAWGOOD_APP_URL || 'https://www.mawgood.store',
     androidScheme: 'https',
     cleartext: true,
   },
