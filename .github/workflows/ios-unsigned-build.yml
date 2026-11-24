@@ -34,7 +34,7 @@ jobs:
           git push origin HEAD:ios-prep
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install --legacy-peer-deps --ignore-scripts
       - run: mkdir -p dist && npx cap sync ios
       - name: Build for simulator (unsigned)
