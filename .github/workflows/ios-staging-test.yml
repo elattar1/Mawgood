@@ -261,6 +261,22 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build2 \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -60
           exit ${PIPESTATUS[0]}
+      - name: Assert no page zoom or horizontal overflow in the UI dumps
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import re,glob,sys
+          bad=[]
+          for f in sorted(glob.glob('/tmp/uitest/*.txt')):
+              t=open(f,errors='ignore').read()
+              m=re.search(r'\n {16}Other, 0x[0-9a-f]+, \{\{[-0-9.]+, [-0-9.]+\}, \{([0-9.]+), ([0-9.]+)\}\}',t)
+              w=re.search(r'Window \(Main\), 0x[0-9a-f]+, \{\{[-0-9.]+, [-0-9.]+\}, \{([0-9.]+), ',t)
+              if m and w:
+                  print(f.split('/')[-1],'content width',m.group(1),'window width',w.group(1))
+                  if float(m.group(1))>float(w.group(1))+1: bad.append(f.split('/')[-1])
+          print('overflow/zoom in:',bad)
+          sys.exit(1 if bad else 0)
+          PY
       - name: Verify order in staging DB and clean up (orders, driver, users)
         if: always()
         run: |
@@ -285,7 +301,16 @@ jobs:
         if: always()
         run: |
           rm -f /tmp/uitest-cred/cred.json
-          [ -s /tmp/uid-ui ] && curl -fsS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$(cat /tmp/uid-ui)" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -o /dev/null -w "delete ui user http %{http_code}\n" || echo "no ui user to delete"
+          H1="apikey: $STAGING_SERVICE_ROLE_KEY"; H2="Authorization: Bearer $STAGING_SERVICE_ROLE_KEY"
+          U=$(cat /tmp/uid-ui 2>/dev/null || true)
+          if [ -n "$U" ]; then
+            cnt() { curl -sS -I "$SUPABASE_URL/rest/v1/$1?$2=eq.$U&select=id" -H "$H1" -H "$H2" -H "Prefer: count=exact" -H "Range: 0-0" | tr -d '\r' | awk -F/ 'tolower($1) ~ /content-range/ {print $2}'; }
+            for t in notifications:user_id; do echo "before delete ${t%%:*} rows for synthetic user: $(cnt ${t%%:*} ${t#*:})"; done
+            curl -sS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$U" -H "$H1" -H "$H2" -o /dev/null -w "delete ui user http %{http_code}\n"
+            curl -sS -X DELETE "$SUPABASE_URL/rest/v1/notifications?user_id=eq.$U" -H "$H1" -H "$H2" -o /dev/null -w "explicit delete leftover notifications http %{http_code}\n" || true
+            echo "after delete notifications rows for synthetic user: $(cnt notifications user_id)"
+            [ "$(cnt notifications user_id)" = "0" ]
+          else echo "no ui user to delete"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -296,3 +321,4 @@ jobs:
       - name: Fail if UI test failed
         if: steps.ui.outcome == 'failure'
         run: exit 1
+# marker: re-run after css zoom fix
