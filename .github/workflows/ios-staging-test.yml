@@ -6,6 +6,10 @@ name: iOS staging test (synthetic data, isolated staging Supabase)
 # sent to any phone, device or external service. Synthetic user uses a reserved example.test address.
 on:
   workflow_dispatch:
+  push:
+    branches: [ios-prep]
+    paths:
+      - '.github/workflows/ios-staging-test.yml'
 
 permissions:
   contents: read
