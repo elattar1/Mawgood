@@ -119,6 +119,8 @@ jobs:
             c.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.husayniya.services.uitests'
             c.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
             c.build_settings['SWIFT_VERSION'] = '5.0'
+            c.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
+            c.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
           end
           proj.save
           sch = Xcodeproj::XCScheme.new
