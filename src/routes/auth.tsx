@@ -291,6 +291,21 @@ function Auth() {
     setSuccessMsg("");
     try {
       const redirectUri = `${window.location.origin}/auth?redirect=${encodeURIComponent(redirect)}`;
+      // iOS app only: Google blocks sign-in inside embedded WKWebView, so open the
+      // consent page in the system browser sheet and return via the app URL scheme.
+      // Web and Android keep the original flow below.
+      const { Capacitor } = await import("@capacitor/core");
+      if (Capacitor.getPlatform() === "ios") {
+        const { Browser } = await import("@capacitor/browser");
+        const { data: oauthData, error: oauthErr } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: "com.husayniya.services://auth-callback", skipBrowserRedirect: true },
+        });
+        if (oauthErr) throw oauthErr;
+        if (!oauthData?.url) throw new Error("تعذر بدء تسجيل الدخول بحساب Google");
+        await Browser.open({ url: oauthData.url });
+        return;
+      }
       const { error: supErr } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: redirectUri },

@@ -54,6 +54,12 @@ export async function initCapacitorApp(): Promise<void> {
     // 4. Handle Deep Linking for OAuth (e.g. returning from Chrome back into app)
     App.addListener('appUrlOpen', async ({ url }) => {
       try {
+        try {
+          const { Browser } = await import('@capacitor/browser');
+          await Browser.close();
+        } catch {
+          // Browser sheet not open (Android) - nothing to close
+        }
         const parsed = new URL(url);
         // Supabase sends tokens in URL fragment (#access_token=...&refresh_token=...)
         if (parsed.hash) {
