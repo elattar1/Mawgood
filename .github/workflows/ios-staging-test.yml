@@ -220,13 +220,13 @@ jobs:
           XCTAssertTrue(confirm.exists, "confirm button not found (store closed or no active driver would show another label)")
           XCTAssertTrue(confirm.isHittable, "confirm button not hittable (keyboard still covering?)")
           confirm.tap()
-          let ok = label(app, "تم إرسال طلبك إلى المتجر")
-          let sent = ok.waitForExistence(timeout: 20)
+          let pending = label(app, "قيد الانتظار")
+          let sent = pending.waitForExistence(timeout: 25)
           sleep(2)
           snap(app, "12-after-order")
-          let cartEmptyNow = label(app, "السلة فارغة").waitForExistence(timeout: 10)
+          let storeInOrders = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "CI Staging Store")).firstMatch.exists
           snap(app, "13-orders")
-          XCTAssertTrue(sent || cartEmptyNow, "no order confirmation toast and cart not emptied after confirm")
+          XCTAssertTrue(sent && storeInOrders, "orders page did not show a pending order for the seeded store after confirm")
           stage("order-submitted")
               }
           }
