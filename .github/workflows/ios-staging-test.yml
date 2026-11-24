@@ -1,0 +1,97 @@
+name: iOS staging test (synthetic data, isolated staging Supabase)
+
+# Branch-only. Runs the app web build against the separate STAGING Supabase project
+# (never production), serves it on localhost on the runner and launches the iOS simulator
+# shell against it. Push, AI and cron secrets are intentionally NOT set, so nothing is
+# sent to any phone, device or external service. Synthetic user uses a reserved example.test address.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-staging-test
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: github.ref == 'refs/heads/ios-prep'
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Guard (env must be explicit and non-production)
+        run: |
+          rm -f .env .env.local .env.production
+          node scripts/assert-staging-target.mjs
+      - run: npm install --legacy-peer-deps --ignore-scripts
+      - name: Remove hardcoded production fallbacks (CI workspace only, not committed)
+        run: |
+          sed -i 's#"https://ryxfnrozrzkuhobxfcmw.supabase.co"#"https://staging-required.invalid"#g' src/lib/auth.functions.ts
+          if grep -rn "ryxfnrozrzkuhobxfcmw" src --include=*.ts --include=*.tsx | grep -v "src/test/"; then echo "production ref still in src"; exit 1; fi
+      - name: Build web (node-server)
+        run: NITRO_PRESET=node-server npx vite build
+      - name: Guard (scan build output for production refs)
+        run: node scripts/assert-staging-target.mjs .output
+      - name: Serve on localhost (no push/AI/cron env)
+        run: |
+          env -u STAGING_SERVICE_ROLE_KEY SUPABASE_SERVICE_ROLE_KEY="$STAGING_SERVICE_ROLE_KEY" PORT=3000 HOST=127.0.0.1 nohup node .output/server/index.mjs > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:3000/ && break; sleep 2; done
+          curl -fsS -o /dev/null -w "home http %{http_code}\n" http://127.0.0.1:3000/
+      - name: Backend synthetic checks (staging only, example.test user, no email sent)
+        run: |
+          set -e
+          PW="Ci-$(openssl rand -hex 12)"; echo "::add-mask::$PW"
+          EMAIL="ci-$(date +%s)@example.test"
+          H1="apikey: $STAGING_SERVICE_ROLE_KEY"; H2="Authorization: Bearer $STAGING_SERVICE_ROLE_KEY"
+          UID_=$(curl -fsS -X POST "$SUPABASE_URL/auth/v1/admin/users" -H "$H1" -H "$H2" -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\",\"email_confirm\":true}" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+          echo "$UID_" > /tmp/uid
+          TOK=$(curl -fsS -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          echo "::add-mask::$TOK"
+          echo "signed in synthetic user: ok"
+          N=$(curl -fsS "$SUPABASE_URL/rest/v1/stores?select=id" -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $TOK" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))")
+          echo "stores visible to a customer: $N"
+          P=$(curl -fsS "$SUPABASE_URL/rest/v1/profiles?select=id" -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $TOK" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))")
+          echo "profiles visible to the customer (should be own only): $P"
+          [ "$N" -ge 1 ]
+          [ "$P" -le 1 ]
+      - name: Delete synthetic user
+        if: always()
+        run: |
+          [ -s /tmp/uid ] && curl -fsS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$(cat /tmp/uid)" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -o /dev/null -w "delete user http %{http_code}\n" || echo "no user to delete"
+      - name: Build iOS shell pointing at localhost
+        run: |
+          mkdir -p dist
+          MAWGOOD_APP_URL=http://localhost:3000 npx cap sync ios
+          grep -rn "localhost:3000" ios/App/App/capacitor.config.json
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -5
+      - name: Launch simulator against localhost and screenshot
+        run: |
+          APP=$(find build/Build/Products -name 'App.app' -maxdepth 3 | head -1)
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']]; print(c[-1]['udid'])")
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.husayniya.services
+          sleep 40
+          xcrun simctl io "$UDID" screenshot staging-home.png
+          ls -la staging-home.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-simulator
+          path: |
+            staging-home.png
+            /tmp/server.log
