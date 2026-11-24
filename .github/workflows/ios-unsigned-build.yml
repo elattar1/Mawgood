@@ -1,8 +1,8 @@
 name: iOS unsigned build check
 
-# Imports the iOS preparation (2-ios-prep.tar.gz) once, then compiles the iOS
-# project for the simulator with no signing and no secrets. It does NOT make an
-# installable or App Store build. Standard GitHub-hosted runner only.
+# Compiles the iOS project for the simulator with no signing and no secrets,
+# launches it and saves a screenshot artifact. It does NOT make an installable
+# or App Store build. Standard GitHub-hosted runner only.
 on:
   workflow_dispatch:
   push:
@@ -14,24 +14,13 @@ on:
       - '.github/workflows/ios-unsigned-build.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Import prepared files (once)
-        if: github.ref == 'refs/heads/ios-prep' && hashFiles('2-ios-prep.tar.gz') != ''
-        run: |
-          tar xzf 2-ios-prep.tar.gz
-          git rm -q --cached 2-ios-prep.tar.gz
-          rm 2-ios-prep.tar.gz
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Add iOS platform (Capacitor), iOS sign-in via system browser, branded splash"
-          git push origin HEAD:ios-prep
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -55,12 +44,15 @@ jobs:
           xcrun simctl launch "$UDID" com.husayniya.services
           sleep 30
           xcrun simctl io "$UDID" screenshot shot1.png
-          sips -Z 420 -s format jpeg -s formatOptions 45 shot1.png --out shot1.jpg
-          ls -la shot1.png shot1.jpg
-          echo "-----B64START"
-          base64 -i shot1.jpg
-          echo "-----B64END"
+          ls -la shot1.png
+          # Best effort: tap the notification prompt through Simulator UI scripting
+          osascript -e 'tell application "System Events" to tell process "Simulator" to click (first button of window 1 whose name is "Don\u2019t Allow" or name is "Don'"'"'t Allow")' || echo "ui scripting not permitted"
+          sleep 5
+          xcrun simctl io "$UDID" screenshot shot2.png
+          ls -la shot2.png
       - uses: actions/upload-artifact@v4
         with:
           name: simulator-screenshot
-          path: shot1.png
+          path: |
+            shot1.png
+            shot2.png
