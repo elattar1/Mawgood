@@ -1,0 +1,45 @@
+name: iOS unsigned build check
+
+# Imports the iOS preparation (ios-prep.tar.gz) once, then compiles the iOS
+# project for the simulator with no signing and no secrets. It does NOT make an
+# installable or App Store build. Standard GitHub-hosted runner only.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-prep]
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - '.github/workflows/ios-unsigned-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import prepared files (once)
+        if: github.ref == 'refs/heads/ios-prep' && hashFiles('ios-prep.tar.gz') != ''
+        run: |
+          tar xzf ios-prep.tar.gz
+          git rm -q --cached ios-prep.tar.gz
+          rm ios-prep.tar.gz
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add iOS platform (Capacitor), iOS sign-in via system browser, branded splash"
+          git push origin HEAD:ios-prep
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --legacy-peer-deps --ignore-scripts
+      - run: mkdir -p dist && npx cap sync ios
+      - name: Build for simulator (unsigned)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
