@@ -195,6 +195,8 @@ jobs:
           XCTAssertNotNil(cartTab, "bottom cart tab not found")
           cartTab?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
           sleep(6)
+          let locDeny = sb.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Don")).firstMatch
+          if locDeny.waitForExistence(timeout: 8) { locDeny.tap(); sleep(2) }
           snap(app, "10-cart")
           let addr = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS %@", "اكتب عنوانك")).firstMatch
           tries = 0
@@ -206,14 +208,25 @@ jobs:
           while !phone.exists && tries < 4 { app.swipeUp(); tries += 1; sleep(1) }
           XCTAssertTrue(phone.exists, "phone field not found in cart")
           phone.tap(); phone.typeText("01999999999")
+          let kbDone = app.buttons.matching(NSPredicate(format: "label IN %@", ["Done", "تم", "Return", "return"])).firstMatch
+          if kbDone.exists { kbDone.tap() } else if app.keyboards.count > 0 { label(app, "بيانات التوصيل").tap() }
+          sleep(1)
+          if app.keyboards.count > 0 { app.swipeDown() }
+          sleep(1)
           snap(app, "11-checkout-filled")
           let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "تأكيد وإرسال الطلب")).firstMatch
           tries = 0
           while !confirm.exists && tries < 6 { app.swipeUp(); tries += 1; sleep(1) }
           XCTAssertTrue(confirm.exists, "confirm button not found (store closed or no active driver would show another label)")
+          XCTAssertTrue(confirm.isHittable, "confirm button not hittable (keyboard still covering?)")
           confirm.tap()
-          sleep(8)
+          let ok = label(app, "تم إرسال طلبك إلى المتجر")
+          let sent = ok.waitForExistence(timeout: 20)
+          sleep(2)
           snap(app, "12-after-order")
+          let cartEmptyNow = label(app, "السلة فارغة").waitForExistence(timeout: 10)
+          snap(app, "13-orders")
+          XCTAssertTrue(sent || cartEmptyNow, "no order confirmation toast and cart not emptied after confirm")
           stage("order-submitted")
               }
           }
@@ -254,6 +267,7 @@ jobs:
           H1="apikey: $STAGING_SERVICE_ROLE_KEY"; H2="Authorization: Bearer $STAGING_SERVICE_ROLE_KEY"
           curl -sS "$SUPABASE_URL/rest/v1/orders?select=id,status&store_id=eq.a0000000-0000-4000-8000-0000000000c1&order=created_at.desc&limit=5" -H "$H1" -H "$H2" > /tmp/orders.json
           python3 -c "import json;d=json.load(open('/tmp/orders.json'));print('orders in staging:',len(d),[o.get('status') for o in d] if isinstance(d,list) else d)"
+          echo "$(python3 -c "import json;d=json.load(open('/tmp/orders.json'));print(len(d) if isinstance(d,list) else 0)")" > /tmp/order-count
           IDS=$(python3 -c "import json;d=json.load(open('/tmp/orders.json'));print(','.join(o['id'] for o in d) if isinstance(d,list) else '')")
           if [ -n "$IDS" ]; then
             curl -sS -X DELETE "$SUPABASE_URL/rest/v1/order_items?order_id=in.($IDS)" -H "$H1" -H "$H2" -o /dev/null -w "delete order_items http %{http_code}\n" || true
@@ -262,6 +276,11 @@ jobs:
           for t in products:id=eq.c0000000-0000-4000-8000-0000000000c1 store_sections:id=eq.b0000000-0000-4000-8000-0000000000c1 stores:id=eq.a0000000-0000-4000-8000-0000000000c1; do curl -sS -X DELETE "$SUPABASE_URL/rest/v1/${t%%:*}?${t#*:}" -H "$H1" -H "$H2" -o /dev/null -w "delete ${t%%:*} http %{http_code}\n" || true; done
           [ -s /tmp/uid-driver ] && curl -sS -X DELETE "$SUPABASE_URL/rest/v1/drivers?user_id=eq.$(cat /tmp/uid-driver)" -H "$H1" -H "$H2" -o /dev/null -w "delete driver row http %{http_code}\n" || true
           [ -s /tmp/uid-driver ] && curl -sS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$(cat /tmp/uid-driver)" -H "$H1" -H "$H2" -o /dev/null -w "delete driver user http %{http_code}\n" || true
+      - name: Require an order row was created in staging
+        if: steps.ui.outcome == 'success'
+        run: |
+          N=$(cat /tmp/order-count); echo "orders created by the UI test: $N"
+          [ "$N" -ge 1 ]
       - name: Delete synthetic UI user
         if: always()
         run: |
