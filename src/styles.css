@@ -414,3 +414,13 @@ div:has(> a[href*="lovable.app"]) {
   width: 0 !important;
   overflow: hidden !important;
 }
+
+/* iOS WebView: focusing an input with font-size under 16px makes iOS zoom the whole page and it never zooms back
+   (seen as a horizontally clipped layout after checkout). Keep form controls at 16px on phones. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
