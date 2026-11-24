@@ -91,17 +91,22 @@ jobs:
               XCTAssertTrue(home.waitForExistence(timeout: 30), "home tab not found")
               sleep(3)
               snap(app, "01-home")
-              let before = app.debugDescription
-              let cart = label(app, "السلة")
-              XCTAssertTrue(cart.waitForExistence(timeout: 10), "cart tab not found")
-              cart.tap()
-              sleep(5)
+              let links = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex
+              var info = "cart_links=\(links.count)"
+              for l in links { info += " [y=\(l.frame.minY) hittable=\(l.isHittable)]" }
+              try? info.write(toFile: "\(dir)/cart-links.txt", atomically: true, encoding: .utf8)
+              let bottom = links.max(by: { $0.frame.minY < $1.frame.minY })
+              XCTAssertNotNil(bottom, "no cart link found")
+              bottom?.tap()
+              let empty = label(app, "السلة فارغة")
+              let cartShown = empty.waitForExistence(timeout: 20)
+              sleep(2)
               snap(app, "02-cart")
-              XCTAssertNotEqual(before, app.debugDescription, "cart tap did not change the screen")
+              XCTAssertTrue(cartShown, "after tapping the cart tab the cart screen (السلة فارغة) did not appear")
               home.tap()
               sleep(4)
               snap(app, "03-home-again")
-              let cat = label(app, "المطاعم والكافيهات")
+              let cat = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "المطاعم والكافيهات")).firstMatch
               if cat.waitForExistence(timeout: 10) { cat.tap(); sleep(4); snap(app, "04-category") }
             }
           }
