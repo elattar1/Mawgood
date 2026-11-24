@@ -97,7 +97,7 @@ jobs:
           DUID=$(curl -fsS -X POST "$SUPABASE_URL/auth/v1/admin/users" -H "apikey: $STAGING_SERVICE_ROLE_KEY" -H "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" -H 'Content-Type: application/json' \
             -d "{\"email\":\"$DEMAIL\",\"password\":\"$DPW\",\"email_confirm\":true}" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
           echo "$DUID" > /tmp/uid-driver
-          R="$SUPABASE_URL/rest/v1"; HJ="Content-Type: application/json"; HP="Prefer: return=minimal"; K1="apikey: $STAGING_SERVICE_ROLE_KEY"; K2="Authorization: Bearer $STAGING_SERVICE_ROLE_KEY"
+          R="$SUPABASE_URL/rest/v1"; HJ="Content-Type: application/json"; HP="Prefer: resolution=merge-duplicates,return=minimal"; K1="apikey: $STAGING_SERVICE_ROLE_KEY"; K2="Authorization: Bearer $STAGING_SERVICE_ROLE_KEY"
           curl -fsS -X POST "$R/stores" -H "$K1" -H "$K2" -H "$HJ" -H "$HP" -w "seed store http %{http_code}\n" \
             -d '{"id":"a0000000-0000-4000-8000-0000000000c1","category":"restaurants","area_id":1,"name":"CI Staging Store","description":"synthetic test store [hours:00:00-23:59]","phone":"01999999997","address":"synthetic address","delivery_fee":10,"commission_rate":10,"rating":4,"reviews_count":0,"is_active":true,"is_open":true}'
           curl -fsS -X POST "$R/store_sections" -H "$K1" -H "$K2" -H "$HJ" -H "$HP" -w "seed section http %{http_code}\n" \
@@ -191,10 +191,17 @@ jobs:
           sleep(2)
           snap(app, "09-added")
           stage("added-to-cart")
-          let cartTab = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
-          XCTAssertNotNil(cartTab, "cart tab not found")
-          cartTab?.tap()
-          sleep(5)
+          let inPageCart = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "السلة (")).firstMatch
+          if inPageCart.waitForExistence(timeout: 5) { inPageCart.tap() } else {
+            let cartTab = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
+            XCTAssertNotNil(cartTab, "cart entry not found")
+            cartTab?.tap()
+          }
+          sleep(6)
+          if !label(app, "سلة المشتريات").exists {
+            let cartTab2 = app.links.matching(NSPredicate(format: "label == %@", "السلة")).allElementsBoundByIndex.max(by: { $0.frame.minY < $1.frame.minY })
+            cartTab2?.tap(); sleep(6)
+          }
           snap(app, "10-cart")
           let addr = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS %@", "اكتب عنوانك")).firstMatch
           tries = 0
@@ -259,7 +266,7 @@ jobs:
             curl -sS -X DELETE "$SUPABASE_URL/rest/v1/order_items?order_id=in.($IDS)" -H "$H1" -H "$H2" -o /dev/null -w "delete order_items http %{http_code}\n" || true
             curl -sS -X DELETE "$SUPABASE_URL/rest/v1/orders?id=in.($IDS)" -H "$H1" -H "$H2" -o /dev/null -w "delete orders http %{http_code}\n" || true
           fi
-          for t in products:id=c0000000-0000-4000-8000-0000000000c1 store_sections:id=b0000000-0000-4000-8000-0000000000c1 stores:id=a0000000-0000-4000-8000-0000000000c1; do curl -sS -X DELETE "$SUPABASE_URL/rest/v1/${t%%:*}?${t#*:}" -H "$H1" -H "$H2" -o /dev/null -w "delete ${t%%:*} http %{http_code}\n" || true; done
+          for t in products:id=eq.c0000000-0000-4000-8000-0000000000c1 store_sections:id=eq.b0000000-0000-4000-8000-0000000000c1 stores:id=eq.a0000000-0000-4000-8000-0000000000c1; do curl -sS -X DELETE "$SUPABASE_URL/rest/v1/${t%%:*}?${t#*:}" -H "$H1" -H "$H2" -o /dev/null -w "delete ${t%%:*} http %{http_code}\n" || true; done
           [ -s /tmp/uid-driver ] && curl -sS -X DELETE "$SUPABASE_URL/rest/v1/drivers?user_id=eq.$(cat /tmp/uid-driver)" -H "$H1" -H "$H2" -o /dev/null -w "delete driver row http %{http_code}\n" || true
           [ -s /tmp/uid-driver ] && curl -sS -X DELETE "$SUPABASE_URL/auth/v1/admin/users/$(cat /tmp/uid-driver)" -H "$H1" -H "$H2" -o /dev/null -w "delete driver user http %{http_code}\n" || true
       - name: Delete synthetic UI user
