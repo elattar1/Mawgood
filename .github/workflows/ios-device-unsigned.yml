@@ -1,0 +1,58 @@
+name: iOS device build (unsigned IPA)
+
+# Branch-only. Builds an UNSIGNED arm64 device IPA of the Capacitor shell. The shell loads
+# https://www.mawgood.store at runtime (existing app design). No secrets are used and nothing is deployed.
+# The IPA cannot be installed until the owner signs it with his own Apple Account.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-prep]
+    paths:
+      - '.github/workflows/ios-device-unsigned.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/ios-prep'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --legacy-peer-deps --ignore-scripts
+      - name: Sync Capacitor (stub web dir, app loads server.url)
+        run: |
+          mkdir -p dist
+          echo '<!doctype html><title>Mawgood</title>' > dist/index.html
+          npx cap sync ios
+      - name: Build unsigned device app
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphoneos -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            -skipPackagePluginValidation build 2>&1 | tail -40
+      - name: Package and verify IPA
+        run: |
+          APP=$(ls -d build/Build/Products/Release-iphoneos/*.app | head -1)
+          echo "APP=$APP"
+          mkdir Payload && cp -R "$APP" Payload/
+          zip -qr Mawgood-unsigned.ipa Payload
+          ls -l Mawgood-unsigned.ipa
+          P="$APP/Info.plist"
+          echo "bundle id: $(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' $P)"
+          echo "version: $(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' $P) ($(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' $P))"
+          echo "min OS: $(/usr/libexec/PlistBuddy -c 'Print MinimumOSVersion' $P)"
+          echo "platform: $(/usr/libexec/PlistBuddy -c 'Print CFBundleSupportedPlatforms' $P | tr -d '\n')"
+          BIN="$APP/$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' $P)"
+          lipo -info "$BIN"
+          codesign -dv "$APP" 2>&1 | head -3 || true
+          grep -c "mawgood.store" "$APP/capacitor.config.json" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mawgood-unsigned-ipa
+          path: Mawgood-unsigned.ipa
+          retention-days: 7
