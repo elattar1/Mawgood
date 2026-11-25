@@ -51,6 +51,10 @@ jobs:
           lipo -info "$BIN"
           codesign -dv "$APP" 2>&1 | head -3 || true
           grep -c "mawgood.store" "$APP/capacitor.config.json" || true
+      - name: Print checksum and base64 (for retrieval)
+        run: |
+          shasum -a 256 Mawgood-unsigned.ipa
+          base64 -i Mawgood-unsigned.ipa | fold -w 180 | sed 's/^/IPAB64:/'
       - uses: actions/upload-artifact@v4
         with:
           name: Mawgood-unsigned-ipa
