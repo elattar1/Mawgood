@@ -153,7 +153,7 @@ export const claimOrder = createServerFn({ method: "POST" }).middleware([require
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const dr = await supabaseAdmin.from("drivers").select("full_name").eq("user_id", context.userId).maybeSingle();
       const { notifyOrderStatusUpdate } = await import("@/lib/chat.functions");
-      await notifyOrderStatusUpdate(data.id, "on_the_way", { driverName: dr.data?.full_name || undefined });
+      await withTimeout(notifyOrderStatusUpdate(data.id, "on_the_way", { driverName: dr.data?.full_name || undefined }), 4000);
     } catch (e) {
       console.error("claimOrder notification error:", e);
     }
@@ -161,15 +161,33 @@ export const claimOrder = createServerFn({ method: "POST" }).middleware([require
     return { ok: true };
   });
 
+const NOTIFICATION_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([promise, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
+}
+
 export const completeOrder = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .validator(z.object({ id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const r = await context.supabase.rpc("driver_complete_order", { _order_id: data.id });
-    if (r.error) throw new Error(r.error.message);
+    if (r.error) {
+      // Idempotent retry: a duplicate tap or a dropped response can reach us
+      // after the order was already delivered by this driver. Treat it as success.
+      const check = await context.supabase
+        .from("orders")
+        .select("status,driver_id")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (check.data?.status === "delivered" && check.data?.driver_id === context.userId) {
+        return { ok: true, already: true };
+      }
+      throw new Error(r.error.message);
+    }
 
     try {
       const { notifyOrderStatusUpdate } = await import("@/lib/chat.functions");
-      await notifyOrderStatusUpdate(data.id, "delivered");
+      await withTimeout(notifyOrderStatusUpdate(data.id, "delivered"), NOTIFICATION_TIMEOUT_MS);
     } catch (e) {
       console.error("completeOrder notification error:", e);
     }
@@ -360,6 +378,7 @@ export const getDriverLocation = createServerFn({ method: "POST" })
       storeCoords,
       customerAddress: orderRes.data.address,
       storeName: (orderRes.data.stores as any)?.name ?? "المتجر",
+      storeAddress: (orderRes.data.stores as any)?.address ?? null,
       storePhone: (orderRes.data.stores as any)?.phone ?? null,
       driverInfo,
     };
