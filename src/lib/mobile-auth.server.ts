@@ -29,9 +29,16 @@ export async function mobileAuth(
     },
     auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
   });
-  const claims = await supabase.auth.getClaims(token);
-  const userId = claims.data?.claims?.sub;
-  if (claims.error || !userId) return mobileJson({ error: "Unauthorized" }, 401);
+  let userId: string | undefined;
+  try {
+    const claims = await supabase.auth.getClaims(token);
+    if (claims.error) return mobileJson({ error: "Unauthorized" }, 401);
+    userId = claims.data?.claims?.sub;
+  } catch {
+    // A malformed or unverifiable token must be a 401, never a server error.
+    return mobileJson({ error: "Unauthorized" }, 401);
+  }
+  if (!userId) return mobileJson({ error: "Unauthorized" }, 401);
   return { supabase, userId };
 }
 
