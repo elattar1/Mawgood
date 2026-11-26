@@ -40,6 +40,7 @@ import { pageMeta } from "@/lib/page-meta";
 import { MapLocationPicker } from "@/components/MapLocationPicker";
 import { extractCoordinates, cleanDisplayAddress, formatAddressWithCoordinates } from "@/lib/map-utils";
 import { DeleteAccountModal } from "@/components/DeleteAccountModal";
+import { EarningsHistoryDialog } from "@/components/EarningsHistoryDialog";
 import {
   playCustomerOrderAlert,
   getCustomerSoundEnabled,
@@ -110,6 +111,7 @@ function AccountPage() {
 
   // Modals state
   const [complaintsOpen, setComplaintsOpen] = useState(false);
+  const [earningsRole, setEarningsRole] = useState<"partner" | "driver" | null>(null);
   const [driverModalOpen, setDriverModalOpen] = useState(false);
   const [merchantModalOpen, setMerchantModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -718,6 +720,26 @@ function AccountPage() {
                 <span>الإشعارات والتنبيهات</span>
                 <span className="text-xs font-mono">&larr;</span>
               </Link>
+              {(isProvider || isAdmin) && (
+                <button
+                  type="button"
+                  onClick={() => setEarningsRole("partner")}
+                  className="flex w-full items-center justify-between py-2.5 text-muted-foreground hover:text-primary"
+                >
+                  <span>أرباح متجري وسجل المبيعات</span>
+                  <span className="text-xs font-mono">&larr;</span>
+                </button>
+              )}
+              {(isDriver || isAdmin) && (
+                <button
+                  type="button"
+                  onClick={() => setEarningsRole("driver")}
+                  className="flex w-full items-center justify-between py-2.5 text-muted-foreground hover:text-primary"
+                >
+                  <span>أرباحي وسجل التوصيلات</span>
+                  <span className="text-xs font-mono">&larr;</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1127,6 +1149,12 @@ function AccountPage() {
       />
 
       {/* نافذة حذف الحساب */}
+      <EarningsHistoryDialog
+        role={earningsRole ?? "partner"}
+        open={!!earningsRole}
+        onOpenChange={(open) => !open && setEarningsRole(null)}
+      />
+
       <DeleteAccountModal
         open={deleteModalOpen}
         onOpenChange={setDeleteModalOpen}
