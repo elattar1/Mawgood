@@ -22,6 +22,21 @@ import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
 import { Route as AuthenticatedProviderRouteImport } from './routes/_authenticated/provider'
 import { Route as StoresStoreIdRouteImport } from './routes/stores.$storeId'
+import { Route as ApiMobileAccountReactivateRouteImport } from './routes/api.mobile.account-reactivate'
+import { Route as ApiMobileAccountStatusRouteImport } from './routes/api.mobile.account-status'
+import { Route as ApiMobileBookingRouteImport } from './routes/api.mobile.booking'
+import { Route as ApiMobileCancelRouteImport } from './routes/api.mobile.cancel'
+import { Route as ApiMobileComplaintRouteImport } from './routes/api.mobile.complaint'
+import { Route as ApiMobileComplaintsRouteImport } from './routes/api.mobile.complaints'
+import { Route as ApiMobileDeliveryAvailabilityRouteImport } from './routes/api.mobile.delivery-availability'
+import { Route as ApiMobileDriverApplicationRouteImport } from './routes/api.mobile.driver-application'
+import { Route as ApiMobileDriverLocationRouteImport } from './routes/api.mobile.driver-location'
+import { Route as ApiMobileMerchantApplicationRouteImport } from './routes/api.mobile.merchant-application'
+import { Route as ApiMobileOrderRouteImport } from './routes/api.mobile.order'
+import { Route as ApiMobileOrderChatRouteImport } from './routes/api.mobile.order-chat'
+import { Route as ApiMobileOrderChatSendRouteImport } from './routes/api.mobile.order-chat-send'
+import { Route as ApiMobileReviewRouteImport } from './routes/api.mobile.review'
+import { Route as ApiMobileServiceRequestRouteImport } from './routes/api.mobile.service-request'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -88,6 +103,85 @@ const StoresStoreIdRoute = StoresStoreIdRouteImport.update({
   path: '/stores/$storeId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMobileAccountReactivateRoute =
+  ApiMobileAccountReactivateRouteImport.update({
+    id: '/api/mobile/account-reactivate',
+    path: '/api/mobile/account-reactivate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMobileAccountStatusRoute = ApiMobileAccountStatusRouteImport.update({
+  id: '/api/mobile/account-status',
+  path: '/api/mobile/account-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileBookingRoute = ApiMobileBookingRouteImport.update({
+  id: '/api/mobile/booking',
+  path: '/api/mobile/booking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileCancelRoute = ApiMobileCancelRouteImport.update({
+  id: '/api/mobile/cancel',
+  path: '/api/mobile/cancel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileComplaintRoute = ApiMobileComplaintRouteImport.update({
+  id: '/api/mobile/complaint',
+  path: '/api/mobile/complaint',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileComplaintsRoute = ApiMobileComplaintsRouteImport.update({
+  id: '/api/mobile/complaints',
+  path: '/api/mobile/complaints',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileDeliveryAvailabilityRoute =
+  ApiMobileDeliveryAvailabilityRouteImport.update({
+    id: '/api/mobile/delivery-availability',
+    path: '/api/mobile/delivery-availability',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMobileDriverApplicationRoute =
+  ApiMobileDriverApplicationRouteImport.update({
+    id: '/api/mobile/driver-application',
+    path: '/api/mobile/driver-application',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMobileDriverLocationRoute = ApiMobileDriverLocationRouteImport.update({
+  id: '/api/mobile/driver-location',
+  path: '/api/mobile/driver-location',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileMerchantApplicationRoute =
+  ApiMobileMerchantApplicationRouteImport.update({
+    id: '/api/mobile/merchant-application',
+    path: '/api/mobile/merchant-application',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMobileOrderRoute = ApiMobileOrderRouteImport.update({
+  id: '/api/mobile/order',
+  path: '/api/mobile/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileOrderChatRoute = ApiMobileOrderChatRouteImport.update({
+  id: '/api/mobile/order-chat',
+  path: '/api/mobile/order-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileOrderChatSendRoute = ApiMobileOrderChatSendRouteImport.update({
+  id: '/api/mobile/order-chat-send',
+  path: '/api/mobile/order-chat-send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileReviewRoute = ApiMobileReviewRouteImport.update({
+  id: '/api/mobile/review',
+  path: '/api/mobile/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileServiceRequestRoute = ApiMobileServiceRequestRouteImport.update({
+  id: '/api/mobile/service-request',
+  path: '/api/mobile/service-request',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -102,6 +196,21 @@ export interface FileRoutesByFullPath {
   '/orders': typeof AuthenticatedOrdersRoute
   '/provider': typeof AuthenticatedProviderRoute
   '/stores/$storeId': typeof StoresStoreIdRoute
+  '/api/mobile/account-reactivate': typeof ApiMobileAccountReactivateRoute
+  '/api/mobile/account-status': typeof ApiMobileAccountStatusRoute
+  '/api/mobile/booking': typeof ApiMobileBookingRoute
+  '/api/mobile/cancel': typeof ApiMobileCancelRoute
+  '/api/mobile/complaint': typeof ApiMobileComplaintRoute
+  '/api/mobile/complaints': typeof ApiMobileComplaintsRoute
+  '/api/mobile/delivery-availability': typeof ApiMobileDeliveryAvailabilityRoute
+  '/api/mobile/driver-application': typeof ApiMobileDriverApplicationRoute
+  '/api/mobile/driver-location': typeof ApiMobileDriverLocationRoute
+  '/api/mobile/merchant-application': typeof ApiMobileMerchantApplicationRoute
+  '/api/mobile/order': typeof ApiMobileOrderRoute
+  '/api/mobile/order-chat': typeof ApiMobileOrderChatRoute
+  '/api/mobile/order-chat-send': typeof ApiMobileOrderChatSendRoute
+  '/api/mobile/review': typeof ApiMobileReviewRoute
+  '/api/mobile/service-request': typeof ApiMobileServiceRequestRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -116,6 +225,21 @@ export interface FileRoutesByTo {
   '/orders': typeof AuthenticatedOrdersRoute
   '/provider': typeof AuthenticatedProviderRoute
   '/stores/$storeId': typeof StoresStoreIdRoute
+  '/api/mobile/account-reactivate': typeof ApiMobileAccountReactivateRoute
+  '/api/mobile/account-status': typeof ApiMobileAccountStatusRoute
+  '/api/mobile/booking': typeof ApiMobileBookingRoute
+  '/api/mobile/cancel': typeof ApiMobileCancelRoute
+  '/api/mobile/complaint': typeof ApiMobileComplaintRoute
+  '/api/mobile/complaints': typeof ApiMobileComplaintsRoute
+  '/api/mobile/delivery-availability': typeof ApiMobileDeliveryAvailabilityRoute
+  '/api/mobile/driver-application': typeof ApiMobileDriverApplicationRoute
+  '/api/mobile/driver-location': typeof ApiMobileDriverLocationRoute
+  '/api/mobile/merchant-application': typeof ApiMobileMerchantApplicationRoute
+  '/api/mobile/order': typeof ApiMobileOrderRoute
+  '/api/mobile/order-chat': typeof ApiMobileOrderChatRoute
+  '/api/mobile/order-chat-send': typeof ApiMobileOrderChatSendRoute
+  '/api/mobile/review': typeof ApiMobileReviewRoute
+  '/api/mobile/service-request': typeof ApiMobileServiceRequestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -132,6 +256,21 @@ export interface FileRoutesById {
   '/_authenticated/orders': typeof AuthenticatedOrdersRoute
   '/_authenticated/provider': typeof AuthenticatedProviderRoute
   '/stores/$storeId': typeof StoresStoreIdRoute
+  '/api/mobile/account-reactivate': typeof ApiMobileAccountReactivateRoute
+  '/api/mobile/account-status': typeof ApiMobileAccountStatusRoute
+  '/api/mobile/booking': typeof ApiMobileBookingRoute
+  '/api/mobile/cancel': typeof ApiMobileCancelRoute
+  '/api/mobile/complaint': typeof ApiMobileComplaintRoute
+  '/api/mobile/complaints': typeof ApiMobileComplaintsRoute
+  '/api/mobile/delivery-availability': typeof ApiMobileDeliveryAvailabilityRoute
+  '/api/mobile/driver-application': typeof ApiMobileDriverApplicationRoute
+  '/api/mobile/driver-location': typeof ApiMobileDriverLocationRoute
+  '/api/mobile/merchant-application': typeof ApiMobileMerchantApplicationRoute
+  '/api/mobile/order': typeof ApiMobileOrderRoute
+  '/api/mobile/order-chat': typeof ApiMobileOrderChatRoute
+  '/api/mobile/order-chat-send': typeof ApiMobileOrderChatSendRoute
+  '/api/mobile/review': typeof ApiMobileReviewRoute
+  '/api/mobile/service-request': typeof ApiMobileServiceRequestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,6 +287,21 @@ export interface FileRouteTypes {
     | '/orders'
     | '/provider'
     | '/stores/$storeId'
+    | '/api/mobile/account-reactivate'
+    | '/api/mobile/account-status'
+    | '/api/mobile/booking'
+    | '/api/mobile/cancel'
+    | '/api/mobile/complaint'
+    | '/api/mobile/complaints'
+    | '/api/mobile/delivery-availability'
+    | '/api/mobile/driver-application'
+    | '/api/mobile/driver-location'
+    | '/api/mobile/merchant-application'
+    | '/api/mobile/order'
+    | '/api/mobile/order-chat'
+    | '/api/mobile/order-chat-send'
+    | '/api/mobile/review'
+    | '/api/mobile/service-request'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,6 +316,21 @@ export interface FileRouteTypes {
     | '/orders'
     | '/provider'
     | '/stores/$storeId'
+    | '/api/mobile/account-reactivate'
+    | '/api/mobile/account-status'
+    | '/api/mobile/booking'
+    | '/api/mobile/cancel'
+    | '/api/mobile/complaint'
+    | '/api/mobile/complaints'
+    | '/api/mobile/delivery-availability'
+    | '/api/mobile/driver-application'
+    | '/api/mobile/driver-location'
+    | '/api/mobile/merchant-application'
+    | '/api/mobile/order'
+    | '/api/mobile/order-chat'
+    | '/api/mobile/order-chat-send'
+    | '/api/mobile/review'
+    | '/api/mobile/service-request'
   id:
     | '__root__'
     | '/'
@@ -177,6 +346,21 @@ export interface FileRouteTypes {
     | '/_authenticated/orders'
     | '/_authenticated/provider'
     | '/stores/$storeId'
+    | '/api/mobile/account-reactivate'
+    | '/api/mobile/account-status'
+    | '/api/mobile/booking'
+    | '/api/mobile/cancel'
+    | '/api/mobile/complaint'
+    | '/api/mobile/complaints'
+    | '/api/mobile/delivery-availability'
+    | '/api/mobile/driver-application'
+    | '/api/mobile/driver-location'
+    | '/api/mobile/merchant-application'
+    | '/api/mobile/order'
+    | '/api/mobile/order-chat'
+    | '/api/mobile/order-chat-send'
+    | '/api/mobile/review'
+    | '/api/mobile/service-request'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -187,6 +371,21 @@ export interface RootRouteChildren {
   CartRoute: typeof CartRoute
   OffersRoute: typeof OffersRoute
   StoresStoreIdRoute: typeof StoresStoreIdRoute
+  ApiMobileAccountReactivateRoute: typeof ApiMobileAccountReactivateRoute
+  ApiMobileAccountStatusRoute: typeof ApiMobileAccountStatusRoute
+  ApiMobileBookingRoute: typeof ApiMobileBookingRoute
+  ApiMobileCancelRoute: typeof ApiMobileCancelRoute
+  ApiMobileComplaintRoute: typeof ApiMobileComplaintRoute
+  ApiMobileComplaintsRoute: typeof ApiMobileComplaintsRoute
+  ApiMobileDeliveryAvailabilityRoute: typeof ApiMobileDeliveryAvailabilityRoute
+  ApiMobileDriverApplicationRoute: typeof ApiMobileDriverApplicationRoute
+  ApiMobileDriverLocationRoute: typeof ApiMobileDriverLocationRoute
+  ApiMobileMerchantApplicationRoute: typeof ApiMobileMerchantApplicationRoute
+  ApiMobileOrderRoute: typeof ApiMobileOrderRoute
+  ApiMobileOrderChatRoute: typeof ApiMobileOrderChatRoute
+  ApiMobileOrderChatSendRoute: typeof ApiMobileOrderChatSendRoute
+  ApiMobileReviewRoute: typeof ApiMobileReviewRoute
+  ApiMobileServiceRequestRoute: typeof ApiMobileServiceRequestRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -282,6 +481,111 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoresStoreIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mobile/account-reactivate': {
+      id: '/api/mobile/account-reactivate'
+      path: '/api/mobile/account-reactivate'
+      fullPath: '/api/mobile/account-reactivate'
+      preLoaderRoute: typeof ApiMobileAccountReactivateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/account-status': {
+      id: '/api/mobile/account-status'
+      path: '/api/mobile/account-status'
+      fullPath: '/api/mobile/account-status'
+      preLoaderRoute: typeof ApiMobileAccountStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/booking': {
+      id: '/api/mobile/booking'
+      path: '/api/mobile/booking'
+      fullPath: '/api/mobile/booking'
+      preLoaderRoute: typeof ApiMobileBookingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/cancel': {
+      id: '/api/mobile/cancel'
+      path: '/api/mobile/cancel'
+      fullPath: '/api/mobile/cancel'
+      preLoaderRoute: typeof ApiMobileCancelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/complaint': {
+      id: '/api/mobile/complaint'
+      path: '/api/mobile/complaint'
+      fullPath: '/api/mobile/complaint'
+      preLoaderRoute: typeof ApiMobileComplaintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/complaints': {
+      id: '/api/mobile/complaints'
+      path: '/api/mobile/complaints'
+      fullPath: '/api/mobile/complaints'
+      preLoaderRoute: typeof ApiMobileComplaintsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/delivery-availability': {
+      id: '/api/mobile/delivery-availability'
+      path: '/api/mobile/delivery-availability'
+      fullPath: '/api/mobile/delivery-availability'
+      preLoaderRoute: typeof ApiMobileDeliveryAvailabilityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/driver-application': {
+      id: '/api/mobile/driver-application'
+      path: '/api/mobile/driver-application'
+      fullPath: '/api/mobile/driver-application'
+      preLoaderRoute: typeof ApiMobileDriverApplicationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/driver-location': {
+      id: '/api/mobile/driver-location'
+      path: '/api/mobile/driver-location'
+      fullPath: '/api/mobile/driver-location'
+      preLoaderRoute: typeof ApiMobileDriverLocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/merchant-application': {
+      id: '/api/mobile/merchant-application'
+      path: '/api/mobile/merchant-application'
+      fullPath: '/api/mobile/merchant-application'
+      preLoaderRoute: typeof ApiMobileMerchantApplicationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/order': {
+      id: '/api/mobile/order'
+      path: '/api/mobile/order'
+      fullPath: '/api/mobile/order'
+      preLoaderRoute: typeof ApiMobileOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/order-chat': {
+      id: '/api/mobile/order-chat'
+      path: '/api/mobile/order-chat'
+      fullPath: '/api/mobile/order-chat'
+      preLoaderRoute: typeof ApiMobileOrderChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/order-chat-send': {
+      id: '/api/mobile/order-chat-send'
+      path: '/api/mobile/order-chat-send'
+      fullPath: '/api/mobile/order-chat-send'
+      preLoaderRoute: typeof ApiMobileOrderChatSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/review': {
+      id: '/api/mobile/review'
+      path: '/api/mobile/review'
+      fullPath: '/api/mobile/review'
+      preLoaderRoute: typeof ApiMobileReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/service-request': {
+      id: '/api/mobile/service-request'
+      path: '/api/mobile/service-request'
+      fullPath: '/api/mobile/service-request'
+      preLoaderRoute: typeof ApiMobileServiceRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -314,6 +618,21 @@ const rootRouteChildren: RootRouteChildren = {
   CartRoute: CartRoute,
   OffersRoute: OffersRoute,
   StoresStoreIdRoute: StoresStoreIdRoute,
+  ApiMobileAccountReactivateRoute: ApiMobileAccountReactivateRoute,
+  ApiMobileAccountStatusRoute: ApiMobileAccountStatusRoute,
+  ApiMobileBookingRoute: ApiMobileBookingRoute,
+  ApiMobileCancelRoute: ApiMobileCancelRoute,
+  ApiMobileComplaintRoute: ApiMobileComplaintRoute,
+  ApiMobileComplaintsRoute: ApiMobileComplaintsRoute,
+  ApiMobileDeliveryAvailabilityRoute: ApiMobileDeliveryAvailabilityRoute,
+  ApiMobileDriverApplicationRoute: ApiMobileDriverApplicationRoute,
+  ApiMobileDriverLocationRoute: ApiMobileDriverLocationRoute,
+  ApiMobileMerchantApplicationRoute: ApiMobileMerchantApplicationRoute,
+  ApiMobileOrderRoute: ApiMobileOrderRoute,
+  ApiMobileOrderChatRoute: ApiMobileOrderChatRoute,
+  ApiMobileOrderChatSendRoute: ApiMobileOrderChatSendRoute,
+  ApiMobileReviewRoute: ApiMobileReviewRoute,
+  ApiMobileServiceRequestRoute: ApiMobileServiceRequestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
