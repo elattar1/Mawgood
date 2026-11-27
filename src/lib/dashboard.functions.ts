@@ -910,8 +910,9 @@ export const importCatalogProducts = createServerFn({ method: "POST" })
       const group = categoryGroups.find(candidate => candidate.key === item.group) || ALL_TEMPLATE_GROUPS.find(candidate => candidate.key === item.group);
       const desc = item.genericName ? `${item.genericName} • ${item.size}` : item.size;
       const rawImage = item.image || group?.image || null;
-      // نخزن مسارات /catalog/items/ النسبية كما هي - التطبيق يقدمها من مجلد public
-      const safeDbImage = rawImage;
+      const safeDbImage = rawImage && rawImage.startsWith('/catalog/items/')
+        ? `https://mawgood.app${rawImage}`
+        : rawImage;
       return {
         store_id: data.store_id,
         catalog_key: item.key,
@@ -1486,3 +1487,4 @@ export const reviewStoreDeletionRequest = createServerFn({ method: "POST" })
       return { success: true, approved: false };
     }
   });
+

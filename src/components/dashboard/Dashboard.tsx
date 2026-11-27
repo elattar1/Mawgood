@@ -53,15 +53,7 @@ import { Field, SelectField, ToggleField } from "./fields";
 import { ImageUploadField } from "./ImageUpload";
 import { CatalogPicker } from "./CatalogPicker";
 import { AdminCatalogManager } from "./AdminCatalogManager";
-import { resolveProductImageUrl, findTemplateItem } from "@/lib/template-catalogs";
-import { telHref } from "@/lib/phone";
-import { supabase } from "@/integrations/supabase/client";
-
-// منتج مستورد من الكتالوج بدون صورة محفوظة يستخدم صورة قالب الكتالوج عند العرض
-function catalogTemplateImage(key?: string | null): string | null {
-  if (!key) return null;
-  return findTemplateItem(key)?.image ?? null;
-}
+import { resolveProductImageUrl } from "@/lib/template-catalogs";
 import { dashboardQuery, dashboardProductsQuery, dashboardSectionsQuery, dashboardOrderItemsQuery, type DashboardData, type DashboardProduct, type DashboardSection } from "./queries";
 import { 
   playNewOrderAlert,
@@ -130,12 +122,8 @@ export function Dashboard({
   // مفتاح تخزين المتجر الافتراضي المفضل لصاحب المتجر ليبقى ثابتاً في كل زيارة
   const storageKey = user ? `husayniya_default_store_${user.id}` : "husayniya_default_store";
 
-  // استرجاع المتجر الافتراضي: أولاً من بيانات الحساب (يطبق على كل الأجهزة) ثم من التخزين المحلي
+  // استرجاع المتجر الافتراضي المفضل المحفوظ سابقاً
   const [selectedStore, setSelectedStore] = useState<string>(() => {
-    const fromAccount = (user?.user_metadata as Record<string, unknown> | undefined)?.["default_store_id"];
-    if (typeof fromAccount === "string" && data.stores.some(s => s.id === fromAccount)) {
-      return fromAccount;
-    }
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem(storageKey);
@@ -149,32 +137,26 @@ export function Dashboard({
 
   const store = data.stores.find(s => s.id === selectedStore) ?? data.stores[0];
 
-  // التبويبات التي زارها التاجر تبقى محمّلة في الخلفية ولا يعاد تحميلها عند كل تبديل
-  const [mountedTabs, setMountedTabs] = useState<ReadonlySet<string>>(() => new Set([tab]));
-  useEffect(() => {
-    setMountedTabs(prev => (prev.has(tab) ? prev : new Set(prev).add(tab)));
-  }, [tab]);
-
-  // مزامنة وحفظ المتجر الافتراضي تلقائياً عند الدخول أو التغيير (محلياً وعلى الحساب)
+  // مزامنة وحفظ المتجر الافتراضي تلقائياً عند الدخول أو التغيير
   useEffect(() => {
     if (!admin && store?.id && typeof window !== "undefined") {
       try {
         localStorage.setItem(storageKey, store.id);
       } catch {}
-      if (((user?.user_metadata as Record<string, unknown> | undefined)?.["default_store_id"]) !== store.id) {
-        void supabase.auth.updateUser({ data: { default_store_id: store.id } }).catch(() => {});
-      }
     }
-  }, [admin, store?.id, storageKey, user?.user_metadata]);
+  }, [admin, store?.id, storageKey]);
 
   const handleSelectStore = (storeId: string) => {
     setSelectedStore(storeId);
     onSearch("");
-    if (!admin) {
-      const stName = data.stores.find(s => s.id === storeId)?.name;
-      if (stName) {
-        toast.success(`تم تعيين «${stName}» كمتجر افتراضي لحسابك بنجاح`);
-      }
+    if (!admin && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(storageKey, storeId);
+        const stName = data.stores.find(s => s.id === storeId)?.name;
+        if (stName) {
+          toast.success(`تم تعيين «${stName}» كمتجر افتراضي لحسابك بنجاح ⭐`);
+        }
+      } catch {}
     }
   };
   const [storeEdit, setStoreEdit] = useState<StoreRow | "new" | null>(null);
@@ -237,25 +219,10 @@ export function Dashboard({
   const [earningsSearch, setEarningsSearch] = useState("");
 
   const [period, setPeriod] = useState<"today" | "week" | "month" | "year" | "all">("all");
-  const productsNeeded = mountedTabs.has('products') || catalogOpen || productEdit !== null;
-  const productQuery = useQuery({ ...dashboardProductsQuery(store?.id ?? ''), enabled: !!store && productsNeeded });
-  const sectionsQuery = useQuery({ ...dashboardSectionsQuery(store?.id ?? ''), enabled: !!store && (productsNeeded || sectionDialogOpen) });
+  const productQuery = useQuery({ ...dashboardProductsQuery(store?.id ?? ''), enabled: !!store && (tab === 'products' || catalogOpen || productEdit !== null) });
+  const sectionsQuery = useQuery({ ...dashboardSectionsQuery(store?.id ?? ''), enabled: !!store && (tab === 'products' || catalogOpen || productEdit !== null || sectionDialogOpen) });
   const itemQuery = useQuery({ ...dashboardOrderItemsQuery(detail?.id ?? '', admin), enabled: detail?.kind === 'orders' });
   const allProducts = productQuery.data ?? [];
-
-  // تحميل الصور الأولى مسبقاً في الخلفية حتى تظهر فور فتح تبويب المنتجات
-  useEffect(() => {
-    if (!allProducts.length || typeof window === "undefined") return;
-    const urls = (allProducts as any[])
-      .map((prod: any) => (prod.image_url || catalogTemplateImage(prod.catalog_key)) as string | null)
-      .filter((u: string | null): u is string => !!u)
-      .map((u: string) => resolveProductImageUrl(u, store?.category) ?? u)
-      .slice(0, 12);
-    const start = () => urls.forEach(u => { const img = new Image(); img.src = u; });
-    const ric = (window as any).requestIdleCallback as ((cb: () => void) => number) | undefined;
-    const handle = ric ? ric(start) : window.setTimeout(start, 800);
-    return () => { if (!ric) window.clearTimeout(handle); };
-  }, [allProducts, store?.category]);
   const sections = sectionsQuery.data ?? [];
   const allTasks = tasksFrom(data);
   const tasks = allTasks.filter(t => admin || t.store_id === store?.id);
@@ -299,7 +266,7 @@ export function Dashboard({
       try {
         localStorage.setItem("husayniya_merchant_sound_enabled", String(next));
       } catch {}
-      toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة" : "تم كتم صوت التنبيهات");
+      toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة 🔔" : "تم كتم صوت التنبيهات 🔕");
       return next;
     });
   };
@@ -328,7 +295,7 @@ export function Dashboard({
 
         try {
           await sendTest({ data: { token: res.token } });
-          toast.success("إشعارات الهاتف مفعّلة! تم إرسال إشعار تجريبي لموبايلك للتأكد من وصوله وهو مقفول");
+          toast.success("إشعارات الهاتف مفعّلة! تم إرسال إشعار تجريبي لموبايلك للتأكد من وصوله وهو مقفول 🔔");
         } catch {
           toast.success("تم تفعيل إشعارات الهاتف بنجاح! ستصلك تنبيهات الطلبات الجديدة خارج الموقع.");
         }
@@ -361,8 +328,8 @@ export function Dashboard({
       playNewOrderAlert(soundEnabled);
       toast.info(
         diff === 1
-          ? "طلب جديد وارد للمتجر قيد الانتظار!"
-          : `لديك ${diff} طلبات جديدة واردة للمتجر!`,
+          ? "🔔 طلب جديد وارد للمتجر قيد الانتظار!"
+          : `🔔 لديك ${diff} طلبات جديدة واردة للمتجر!`,
         { duration: 6000 }
       );
     }
@@ -572,7 +539,7 @@ export function Dashboard({
                 ))}
               </select>
               <span className="shrink-0 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full">
-                الافتراضي النشط
+                الافتراضي النشط ⭐
               </span>
             </div>
           ) : (
@@ -611,7 +578,7 @@ export function Dashboard({
       </div>
 
       <Tabs dir="rtl" value={tab} onValueChange={onTab}>
-        {mountedTabs.has("stores") && <TabsContent value="stores" forceMount>
+        <TabsContent value="stores">
           <div className="mb-6 rounded-2xl border bg-card p-4 sm:p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1258,9 +1225,9 @@ export function Dashboard({
           ) : (
             <Empty text="لم تضف متجرك بعد" action={<Button onClick={() => setStoreEdit("new")}><Plus /> إضافة متجر</Button>} />
           )}
-        </TabsContent>}
+        </TabsContent>
 
-        {mountedTabs.has("products") && <TabsContent value="products" forceMount>
+        <TabsContent value="products">
           <div className="mb-6 rounded-2xl border bg-card p-4 sm:p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1556,9 +1523,9 @@ export function Dashboard({
                     {group.products.map(p => (
                       <div className="flex flex-wrap items-center justify-between gap-3 py-3" key={p.id}>
                         <div className="flex items-center gap-3 min-w-0">
-                          {(p.image_url || catalogTemplateImage((p as any).catalog_key)) ? (
+                          {p.image_url ? (
                             <img
-                              src={resolveProductImageUrl(p.image_url || catalogTemplateImage((p as any).catalog_key), store?.category) ?? ((p.image_url || catalogTemplateImage((p as any).catalog_key)) as string)}
+                              src={resolveProductImageUrl(p.image_url, store?.category) ?? p.image_url}
                               alt=""
                               loading="lazy"
                               className="size-12 rounded-xl object-cover border shrink-0"
@@ -1596,9 +1563,9 @@ export function Dashboard({
               ))}
             </div>
           )}
-        </TabsContent>}
+        </TabsContent>
 
-        {mountedTabs.has("orders") && <TabsContent value="orders" forceMount>
+        <TabsContent value="orders">
           <div className="mb-6 rounded-2xl border bg-card p-4 sm:p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1715,9 +1682,9 @@ export function Dashboard({
             ))}
           </div>
           {!visibleTasks.length && <Empty text="لا توجد طلبات مطابقة للبحث" />}
-        </TabsContent>}
+        </TabsContent>
 
-        {mountedTabs.has("earnings") && <TabsContent value="earnings" forceMount>
+        <TabsContent value="earnings">
           <div className="mb-6 rounded-2xl border bg-card p-4 sm:p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1878,7 +1845,7 @@ export function Dashboard({
             </div>
             {!periodTotals.count && <Empty text="لم تكتمل أي عمليات بيع خلال الفترة المحددة" />}
           </div>
-        </TabsContent>}
+        </TabsContent>
 
         {admin && (
           <TabsContent value="catalog">
@@ -2250,7 +2217,7 @@ export function Dashboard({
               <p className="text-sm">العنوان: {cleanDisplayAddress(currentDetail.address) || "داخل العيادة"}</p>
               <p className="text-sm">
                 الهاتف:{" "}
-                <a dir="ltr" href={telHref(currentDetail.phone)} className="text-primary">
+                <a dir="ltr" href={`tel:${currentDetail.phone}`} className="text-primary">
                   {currentDetail.phone}
                 </a>
               </p>
@@ -2319,8 +2286,8 @@ export function Dashboard({
                           stopKitchenAlarm(currentDetail.id);
                           toast.success(
                             nextStatus === "accepted"
-                              ? "تم تأكيد وقبول الطلب بنجاح!"
-                              : "تم تأكيد تجهيز وتحضير الطلب وجاهزيته للتوصيل!"
+                              ? "✅ تم تأكيد وقبول الطلب بنجاح!"
+                              : "✅ تم تأكيد تجهيز وتحضير الطلب وجاهزيته للتوصيل!"
                           );
                           setDetail(null);
                         }
@@ -2350,7 +2317,7 @@ export function Dashboard({
                             }),
                           () => {
                             stopKitchenAlarm(currentDetail.id);
-                            toast.info("تم إلغاء الطلب واعتذار المتجر للعميل.");
+                            toast.info("❌ تم إلغاء الطلب واعتذار المتجر للعميل.");
                             setDetail(null);
                           }
                         );

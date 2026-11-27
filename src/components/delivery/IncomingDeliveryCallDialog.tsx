@@ -17,6 +17,7 @@ import {
   Package,
   CheckCircle2,
   X,
+  Navigation,
 } from "lucide-react";
 import { getDeliveryOrderCallDetails, claimOrder } from "@/lib/delivery.functions";
 import {
@@ -26,8 +27,7 @@ import {
 } from "@/lib/order-alert";
 import { cleanOrderNotes } from "@/lib/utils";
 import { money } from "@/lib/labels";
-import { cleanDisplayAddress } from "@/lib/map-utils";
-import { telHref } from "@/lib/phone";
+import { cleanDisplayAddress, getGoogleMapsPinUrl } from "@/lib/map-utils";
 
 interface IncomingDeliveryCallDialogProps {
   orderId: string | null;
@@ -113,7 +113,7 @@ export function IncomingDeliveryCallDialog({
         qc.invalidateQueries({ queryKey: ["dashboard"] }),
         qc.invalidateQueries({ queryKey: ["customer-orders"] }),
       ]);
-      toast.success("تم استلام الطلب وأصبح في عهدتك للتوصيل! تم إيقاف رنين المكالمة.");
+      toast.success("✅ تم استلام الطلب وأصبح في عهدتك للتوصيل! تم إيقاف رنين المكالمة.");
       onClaimSuccess?.(id);
       onOpenChange(false);
     },
@@ -176,7 +176,7 @@ export function IncomingDeliveryCallDialog({
         </div>
 
         <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mt-4 flex items-center justify-center gap-2">
-          <span>مكالمة استلام أوردر جاهز للتوصيل</span>
+          <span>مكالمة استلام أوردر جاهز للتوصيل 🛵</span>
           <span className="size-2.5 rounded-full bg-emerald-400 animate-ping" />
         </h2>
 
@@ -223,7 +223,7 @@ export function IncomingDeliveryCallDialog({
                 </span>
                 {order.store_phone && (
                   <a
-                    href={telHref(order.store_phone)}
+                    href={`tel:${order.store_phone}`}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-bold transition-all"
                   >
                     <Phone className="size-3" />
@@ -249,7 +249,7 @@ export function IncomingDeliveryCallDialog({
                 </span>
                 {order.phone && (
                   <a
-                    href={telHref(order.phone)}
+                    href={`tel:${order.phone}`}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-bold transition-all"
                   >
                     <Phone className="size-3" />
@@ -263,7 +263,19 @@ export function IncomingDeliveryCallDialog({
                   <MapPin className="size-3.5 text-amber-400 shrink-0 mt-0.5" />
                   <span>{customerAddressClean}</span>
                 </p>
-
+                {order.address && (
+                  <div className="pt-1.5">
+                    <a
+                      href={getGoogleMapsPinUrl(order.address)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 hover:text-amber-200 underline"
+                    >
+                      <Navigation className="size-3" />
+                      <span>عرض موقع العميل على الخريطة</span>
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -306,7 +318,7 @@ export function IncomingDeliveryCallDialog({
             {/* ملاحظات الأوردر إن وجدت */}
             {cleanedNotes && (
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200 leading-relaxed">
-                <span className="font-bold block mb-0.5">ملاحظات إضافية:</span>
+                <span className="font-bold block mb-0.5">📌 ملاحظات إضافية:</span>
                 <span>{cleanedNotes}</span>
               </div>
             )}
@@ -331,7 +343,7 @@ export function IncomingDeliveryCallDialog({
           ) : (
             <>
               <PhoneCall className="size-6 animate-bounce" />
-              <span>رد واستلام الأوردر الآن (قبول التوصيل)</span>
+              <span>رد واستلام الأوردر الآن (قبول التوصيل) 🛵</span>
             </>
           )}
         </Button>

@@ -20,9 +20,7 @@ import { OrderChatDialog } from "@/components/OrderChatDialog";
 import { LiveDriverTrackingDialog } from "@/components/LiveDriverTrackingDialog";
 import { IncomingDeliveryCallDialog } from "@/components/delivery/IncomingDeliveryCallDialog";
 import { ChatUnreadBadge } from "@/components/ChatUnreadBadge";
-import { extractCoordinates, cleanDisplayAddress } from "@/lib/map-utils";
-import { telHref } from "@/lib/phone";
-import { classifyActionError } from "@/lib/delivery-error";
+import { extractCoordinates, cleanDisplayAddress, getGoogleNavigationUrl, getGoogleMapsPinUrl } from "@/lib/map-utils";
 import { playNewOrderAlert } from "@/lib/order-alert";
 import { useOrderChatUnreadMap } from "@/lib/chat-unread";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,7 +56,7 @@ function Delivery() {
   const [confirm, setConfirm] = useState<DeliveryOrder | null>(null);
   const [chatOrderId, setChatOrderId] = useState<string | null>(chat || null);
   const [callOrderId, setCallOrderId] = useState<string | null>(call || null);
-  const [tracking, setTracking] = useState<{ id: string; leg: "store" | "customer" } | null>(null);
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [lastGpsUpdate, setLastGpsUpdate] = useState<Date | null>(null);
   const [isGpsBroadcasting, setIsGpsBroadcasting] = useState(false);
   const broadcastLocation = useServerFn(updateDriverLocation);
@@ -104,7 +102,7 @@ function Delivery() {
           );
           setLastGpsUpdate(new Date());
           if (showToast) {
-            toast.success("تم تحديث موقعك المباشر للعميل بنجاح");
+            toast.success("تم تحديث موقعك المباشر للعميل بنجاح 📍");
           }
         } catch (e) {
           console.warn("GPS broadcast error:", e);
@@ -163,7 +161,7 @@ function Delivery() {
   useEffect(() => {
     if (isWorking && data.available.length > prevAvailableCount.current) {
       playNewOrderAlert(soundEnabled);
-      toast.info("طلب توصيل جديد متاح في رادار موجود!");
+      toast.info("🚨 طلب توصيل جديد متاح في رادار موجود!");
       const firstReady = data.available.find((o) => o.status === "preparing" && !o.driver_id);
       if (firstReady && !callOrderId) {
         setCallOrderId(firstReady.id);
@@ -209,29 +207,7 @@ function Delivery() {
       toast.success(variables.delivered ? "تم تسجيل التوصيل والتحصيل بنجاح" : "تم استلام الطلب وأصبح في عهدتك");
       if (!variables.delivered) navigate({ search: { tab: "current" } });
     },
-    onError: async (error, variables) => {
-      setConfirm(null);
-      if (variables.delivered) {
-        // الطلب قد يكون سُجّل فعلاً رغم فشل الرد (انقطاع شبكة لحظي) - تحقق قبل إعلان الفشل
-        try {
-          const board = await getDriverBoard();
-          const mine = (board.mine ?? []).find((o) => o.id === variables.id);
-          if (mine?.status === "delivered") {
-            await Promise.all([
-              qc.invalidateQueries({ queryKey: ["delivery-board"] }),
-              qc.invalidateQueries({ queryKey: ["delivery-fleet"] }),
-              qc.invalidateQueries({ queryKey: ["dashboard"] }),
-              qc.invalidateQueries({ queryKey: ["customer-orders"] }),
-            ]);
-            toast.success("تم تسجيل التوصيل والتحصيل بنجاح");
-            return;
-          }
-        } catch {
-          // تجاهل - نعرض الرسالة المصنفة بالأسفل
-        }
-      }
-      toast.error(classifyActionError(error).message);
-    },
+    onError: (error) => toast.error(error.message),
   });
 
   if (!data.driver) {
@@ -294,7 +270,7 @@ function Delivery() {
                   try {
                     localStorage.setItem("husayniya_driver_sound_enabled", String(next));
                   } catch {}
-                  toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة" : "تم كتم صوت التنبيهات");
+                  toast.info(next ? "تم تفعيل صوت التنبيهات للطلبات الجديدة 🔔" : "تم كتم صوت التنبيهات 🔕");
                   return next;
                 });
               }}
@@ -439,7 +415,7 @@ function Delivery() {
                       </h3>
                       {o.stores?.phone && (
                         <Button asChild variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                          <a href={telHref(o.stores.phone)}>
+                          <a href={`tel:${o.stores.phone}`}>
                             <Phone className="size-3" />
                             اتصال بالمتجر
                           </a>
@@ -463,7 +439,7 @@ function Delivery() {
                           <p className="text-[11px] text-muted-foreground">{data.areas.find(a => a.id === o.area_id)?.name}</p>
                           {extractCoordinates(o.address) && (
                             <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">
-                              موقع محدد بدقة على الخريطة
+                              موقع محدد بدقة على الخريطة 📍
                             </span>
                           )}
                         </div>
@@ -472,27 +448,27 @@ function Delivery() {
 
                     {/* أزرار تتبع المسار والملاحة في خرائط جوجل */}
                     <div className="pt-2 border-t border-primary/20 flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        className="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 shadow-sm h-9"
-                        onClick={() => setTracking({ id: o.id, leg: "store" })}
-                        title="عرض المسار من موقعك إلى المتجر داخل التطبيق"
-                      >
-                        <Navigation className="size-4" />
-                        مسار المتجر
+                      <Button asChild variant="default" size="sm" className="flex-1 min-w-[140px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 shadow-sm h-9">
+                        <a
+                          href={getGoogleNavigationUrl(o.address, o.stores?.address)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="بدء الملاحة وتتبع مسار القيادة في خرائط جوجل"
+                        >
+                          <Navigation className="size-4" />
+                          تتبع المسار
+                        </a>
                       </Button>
                       <Button
                         type="button"
-                        variant="default"
+                        variant="secondary"
                         size="sm"
-                        className="flex-1 min-w-[120px] bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-2 shadow-sm h-9"
-                        onClick={() => setTracking({ id: o.id, leg: "customer" })}
-                        title="عرض المسار من المتجر إلى العميل داخل التطبيق"
+                        className="h-9 text-xs font-bold gap-1.5 shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30"
+                        onClick={() => setTrackingOrderId(o.id)}
+                        title="معاينة خريطة التتبع المباشرة التي يراها العميل"
                       >
-                        <Navigation className="size-4" />
-                        مسار العميل
+                        <Navigation className="size-3.5" />
+                        الموقع المباشر
                       </Button>
                       <Button
                         type="button"
@@ -532,7 +508,7 @@ function Delivery() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     {o.phone && (
                       <Button asChild variant="outline" className="flex-1 font-semibold gap-1.5 border-primary/30 h-10">
-                        <a href={telHref(o.phone)}>
+                        <a href={`tel:${o.phone}`}>
                           <Phone className="size-4 text-primary" />
                           اتصال بالعميل
                         </a>
@@ -602,7 +578,7 @@ function Delivery() {
                     </h3>
                     {o.stores?.phone && (
                       <Button asChild variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                        <a href={telHref(o.stores.phone)}>
+                        <a href={`tel:${o.stores.phone}`}>
                           <Phone className="size-3" />
                           اتصال
                         </a>
@@ -625,12 +601,17 @@ function Delivery() {
                         <p className="text-[11px] text-muted-foreground">{data.areas.find(a => a.id === o.area_id)?.name}</p>
                         {extractCoordinates(o.address) && (
                           <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 rounded-full font-mono">
-                            موقع محدد على الخريطة
+                            موقع محدد على الخريطة 📍
                           </span>
                         )}
                       </div>
                     </div>
-
+                    <Button asChild variant="ghost" size="sm" className="h-7 text-xs gap-1 shrink-0">
+                      <a href={getGoogleMapsPinUrl(o.address)} target="_blank" rel="noopener noreferrer">
+                        <Navigation className="size-3" />
+                        الخريطة
+                      </a>
+                    </Button>
                   </div>
                 </div>
 
@@ -710,11 +691,9 @@ function Delivery() {
 
       {/* خريطة تتبع مسار الطلب وموقع الكابتن الحي */}
       <LiveDriverTrackingDialog
-        orderId={tracking?.id ?? null}
-        leg={tracking?.leg ?? "customer"}
-        viewer="rider"
-        open={!!tracking}
-        onOpenChange={(open) => !open && setTracking(null)}
+        orderId={trackingOrderId}
+        open={!!trackingOrderId}
+        onOpenChange={(open) => !open && setTrackingOrderId(null)}
         onOpenChat={(id) => setChatOrderId(id)}
       />
 
