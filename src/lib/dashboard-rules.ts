@@ -71,23 +71,6 @@ export function allowedNext(kind: RequestKind, current: string) {
 
 export type LedgerRow = { kind: RequestKind; status: string; amount: number; commission: number; created_at: string; store_id: string };
 
-export type HistoryRow = LedgerRow & { id: string };
-
-type DashboardLike = {
-  orders: { id: string; store_id: string; status: string; total: number | string; commission_amount: number | string; created_at: string }[];
-  bookings: { id: string; store_id: string; status: string; fee: number | string; commission_amount: number | string; created_at: string }[];
-  services: { id: string; store_id: string; status: string; quoted_price: number | string | null; commission_amount: number | string; created_at: string }[];
-};
-
-/** Ledger rows for the earnings history dialog (B1): orders, bookings and services unified. */
-export function ledgerRowsFrom(data: DashboardLike): HistoryRow[] {
-  return [
-    ...data.orders.map(o => ({ kind: "orders" as const, id: o.id, store_id: o.store_id, status: o.status, amount: Number(o.total), commission: Number(o.commission_amount), created_at: o.created_at })),
-    ...data.bookings.map(o => ({ kind: "bookings" as const, id: o.id, store_id: o.store_id, status: o.status, amount: Number(o.fee), commission: Number(o.commission_amount), created_at: o.created_at })),
-    ...data.services.map(o => ({ kind: "service_requests" as const, id: o.id, store_id: o.store_id, status: o.status, amount: Number(o.quoted_price ?? 0), commission: Number(o.commission_amount), created_at: o.created_at })),
-  ].sort((a, b) => b.created_at.localeCompare(a.created_at));
-}
-
 export function earnings(rows: LedgerRow[]) {
   return rows.reduce((sum, row) => {
     const complete = row.kind === "orders" ? row.status === "delivered" : row.status === "completed";
@@ -128,3 +111,4 @@ export const reviewStoreDeletionRequestInput = z.object({
   action: z.enum(["approve", "reject"]),
   admin_notes: z.string().trim().max(500).optional(),
 });
+
