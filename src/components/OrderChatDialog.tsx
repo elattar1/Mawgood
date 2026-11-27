@@ -30,6 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getOrderChat, sendOrderChatMessage, type OrderChatInfo } from "@/lib/chat.functions";
+import { telHref } from "@/lib/phone";
 import {
   useOrderChatUnreadMap,
   recordChatSeen,
@@ -87,8 +88,8 @@ const CUSTOMER_TO_DRIVER_PRESETS = [
 ];
 
 const DRIVER_TO_CUSTOMER_PRESETS = [
-  "أنا وصلت تحت البيت 📍",
-  "في الطريق إليك 🛵",
+  "أنا وصلت تحت البيت",
+  "في الطريق إليك",
   "أرجو الرد على الهاتف 📞",
   "استلمت طلبك من المحل وفي طريقي إليك 🛍️",
   "معلش فيه زحمة دقائق وأكون عندك ⏳",
@@ -285,7 +286,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                 size="sm"
                 className="h-8 gap-1.5 text-xs font-bold rounded-xl"
               >
-                <a href={`tel:${otherPartyPhone}`}>
+                <a href={telHref(otherPartyPhone)}>
                   <Phone className="size-3.5" />
                   <span className="hidden sm:inline">اتصال</span>
                 </a>
@@ -409,7 +410,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                       msg.sender_role === "store"
                         ? `🏪 ${msg.sender_name || (data.store?.name ?? "المتجر")}`
                         : msg.sender_role === "driver"
-                        ? `🛵 ${msg.sender_name || "كابتن التوصيل"}`
+                        ? msg.sender_name || "كابتن التوصيل"
                         : msg.sender_role === "customer"
                         ? `👤 ${msg.sender_name || "العميل"}`
                         : `🛡️ ${msg.sender_name || "موجود"}`;
@@ -424,7 +425,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                                 <Bike className="size-4" />
                               </div>
                               <span className="font-bold text-xs text-emerald-800 dark:text-emerald-200">
-                                🛵 تم تحويل المحادثة الآن إلى كابتن التوصيل ({data.driver?.name || "الكابتن"})
+                                تم تحويل المحادثة الآن إلى كابتن التوصيل ({data.driver?.name || "الكابتن"})
                               </span>
                               <p className="text-[11px] text-muted-foreground leading-relaxed">
                                 المتجر أنهى التجهيز وسلّم الطلب للكابتن. يمكنك الآن التنسيق مباشرة مع الكابتن حول موقعك والتسليم.
@@ -631,7 +632,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                   </div>
                   {data.store.phone && (
                     <a
-                      href={`tel:${data.store.phone}`}
+                      href={telHref(data.store.phone)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
                     >
                       <Phone className="size-3" />
@@ -654,7 +655,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                   </div>
                   {data.customer.phone && (
                     <a
-                      href={`tel:${data.customer.phone}`}
+                      href={telHref(data.customer.phone)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors"
                     >
                       <Phone className="size-3" />
@@ -677,7 +678,7 @@ export function OrderChatDialog({ orderId, open, onOpenChange }: OrderChatDialog
                   </div>
                   {data.driver.phone && (
                     <a
-                      href={`tel:${data.driver.phone}`}
+                      href={telHref(data.driver.phone)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors"
                     >
                       <Phone className="size-3" />
